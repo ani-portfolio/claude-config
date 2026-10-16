@@ -1,0 +1,38 @@
+# Example answers file for: make_notebook.py <this file>
+# It builds notebooks/05_split.ipynb. Start from the output of make_notebook.py --suggest, which fills most of it in.
+data_path: data/raw/customers.csv
+target: lapsed_60d
+task_type: binary_classification
+# Python body of build_target(df), only when the target is not a column yet. Indent it by four spaces and end
+# with return df. Leave it null when the target is a column.
+target_code: null
+split:
+  strategy: time               # random, group, or time
+  date_col: scoring_date       # time: the column that orders the rows
+  test_days: 71                # time: length of the test period
+  gap_days: 60                 # time: the outcome window or label delay, whichever is longer
+  group_col: customer_id       # group: the entity column. time: only used to report overlap
+  cv:
+    n_folds: 2
+    valid_days: 28             # time: length of each validation window
+    window: expanding          # time: expanding (all earlier data) or sliding (only the last train_days)
+    train_days: null
+  duplicates: keep_together    # keep_together, drop, or ignore
+  missing_target: drop
+  seed: 42
+# One short paragraph each, in plain sentences, shown above the decision cells.
+reasoning:
+  strategy: Offers are scored every Monday from past data, so the test set is the latest period, as in production.
+  test: The last 71 days (about ten weekly scoring dates) are held out, which leaves about seven months for training.
+  cv: Two rolling backtest folds of four weeks each show whether the model is stable over time. Longer windows would leave the first fold too little training data, because of the 60 day gap.
+  duplicates: The EDA found no exact duplicates on the customer and date, so no rows are dropped.
+risks:
+  - problem: Labels of the last 60 days of training would look into the test period.
+    resolution: A 60 day gap is left out before the test set and before each validation window.
+assumptions:
+  - The customer base in the test period is like the one the model will score next.
+open_questions: []
+decisions:
+  - decision: Time split with a 71 day test period, a 60 day gap, and two rolling backtest folds.
+    reason: The model predicts the future, and the 60 day outcome window would otherwise leak labels.
+resolved_questions: []   # for example [{id: Q4, answer: "Split by time, with a 60 day gap."}]

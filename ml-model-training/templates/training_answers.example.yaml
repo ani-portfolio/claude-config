@@ -1,0 +1,32 @@
+# Example answers file for: make_notebook.py <this file>
+# The first run builds notebooks/08_training.ipynb. Later runs add these models to it; models already trained with
+# the same settings are read back from the run log. Start from the output of make_notebook.py --suggest.
+models:
+  - name: logistic
+    type: logistic            # logistic, ridge, tree, random_forest, hist_gbm, lightgbm, xgboost, catboost
+    params: {}                # fixed settings, never tuned, for example {max_depth: 3}
+    class_weight: null        # balanced, or null
+    tuning: quick             # none (default settings), quick (20 trials, 10 min), thorough (60 trials, 30 min),
+                              # or {n_trials: 30, timeout_minutes: 15}
+    reason: The simple model first; it shows whether the features carry signal and is easy to explain.
+  - name: lightgbm
+    type: lightgbm
+    params: {}
+    class_weight: null
+    tuning: quick
+    reason: Gradient boosting usually gives the best results on tables like this one.
+  # Optional on any model: inputs, a subset of the feature inputs it may use, for example
+  # inputs: [trend_weeks, season_sin1, season_cos1]   (a reference model without the media features)
+training:
+  seed: 42
+  selection: best_mean        # the champion is the model with the best mean CV score
+reasoning:
+  models: Start simple, so it is clear how much a complex model adds over a linear one.
+  tuning: A quick search for both; the linear model has one setting, gradient boosting several.
+risks: []
+assumptions: []
+open_questions: []
+decisions:
+  - decision: Train logistic regression and LightGBM, both with quick tuning.
+    reason: The team wants reasons per score, so the linear model stays a serious candidate.
+resolved_questions: []

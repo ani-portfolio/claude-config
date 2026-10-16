@@ -1,0 +1,18 @@
+# Example answers file for: make_notebook.py <this file>
+# Start from the output of make_notebook.py --suggest. The reviewer part comes from the independent reviewer's reply.
+stages: [split, features, baseline, training]   # the stages the user chose; every stage done when reviewing all
+accept:                                         # finding id: the reason it is accepted as it is
+  project.no_lock: The project is a one off analysis; versions are recorded in the notebooks.
+reviewer:
+  at: "2026-10-15T11:40"
+  summary: >
+    Read the spec, the split, features, baseline, and training notebooks, and the feature code. The split and the
+    folds are sound. One hand written feature uses later rows of the same customer.
+  files_read: [ml_spec.yaml, notebooks/05_split.ipynb, notebooks/06_features.ipynb, src/custom_features.py]
+reviewer_findings:
+  - stage: features
+    category: leakage
+    severity: blocker
+    title: A custom feature reads the next order of the same customer
+    evidence: "src/custom_features.py line 24 uses groupby(customer_id)[spend].shift(-1), which is the following row."
+    fix: Use shift(1) after sorting by date, then rerun /ml-feature-engineering and the later stages.

@@ -1,0 +1,50 @@
+# Example answers file for: make_notebook.py <this file>
+# It builds notebooks/06_features.ipynb. Start from the output of make_notebook.py --suggest, which fills in config,
+# excluded, and feature_reasons from the data dictionary and the column types.
+config:
+  numeric: [orders_90d, spend_90d, days_since_last_order]
+  categorical: [plan, region]          # up to about 50 values: one hot (linear) or ordinal codes (tree)
+  high_cardinality: []                 # many values: TargetEncoder in both preprocessors
+  date_parts: {}                       # {date column: [dayofweek, week, month, quarter, year, dayofyear, day, is_weekend]}
+  days_since: []                       # [{column: signup_date, reference: scoring_date}]
+  log: [spend_90d]                     # adds log_spend_90d
+  ratios:                              # adds spend_per_order
+    - {name: spend_per_order, numerator: spend_90d, denominator: orders_90d}
+  lags: []                             # [{column: sales, days: [28, 35], by: store_id}]
+  rolling: []                          # [{column: sales, windows: [7, 28], stats: [mean], shift_days: 28, by: store_id}]
+  custom: true                         # also run src/custom_features.py
+  date_col: scoring_date
+  target: lapsed_60d
+  min_shift_days: 0                    # forecasting: the horizon in days
+  target_min_shift_days: 60            # lags of the target: the label delay or outcome window
+  rare_min_frequency: 0.01             # categories rarer than this are grouped
+  exclude: []
+excluded:                              # every column of the data that is not an input, with the reason
+  customer_id: 'entity ID: identifies the row, so it is not a feature'
+  scoring_date: the prediction date itself; under 400 days of history, so no month or week
+  email: 'excluded in the ML framing: personal data'
+  refund_after_cancel: 'excluded in the ML framing: recorded after the outcome'
+feature_reasons:                       # one line per input, kept in the spec
+  orders_90d: orders in the 90 days before the scoring date
+  spend_90d: spend in the 90 days before the scoring date
+  log_spend_90d: log of spend_90d, which is strongly skewed (helps linear models)
+  spend_per_order: average order value, a sign of how engaged the customer is
+  days_since_last_order: recency, the basis of the current 30 day rule
+  plan: subscription plan, 3 values
+  region: region, 5 values
+leakage_threshold: 0.9
+confirmed_safe: []                     # features above the threshold that the user confirmed are known in time
+# One short paragraph each, shown above the settings.
+reasoning:
+  inputs: Every column the data dictionary marks as known before the scoring date is used. Personal data and the refund column stay out.
+  steps: Spend is skewed, so a log version helps the linear baseline. Average order value is added as a ratio.
+  history: The table already holds 90 day summaries per customer, so no new lags are built.
+  encoding: Plan and region have few values, so one hot encoding for linear models and ordinal codes for trees.
+risks: []
+assumptions:
+  - orders_90d and spend_90d are computed from orders before the scoring date only.
+open_questions: []
+decisions:
+  - decision: No month or week features.
+    reason: With under a year of history, the test months were never seen in training.
+resolved_questions: []

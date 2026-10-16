@@ -1,0 +1,47 @@
+# Example answers file for: make_notebook.py <this file>
+# It builds notebooks/ab01_test_framing.ipynb. Use exactly these keys, and null for anything not known yet.
+status: confirmed
+framing:
+  test_name: Checkout button colour
+  test_state: finished          # planned, running, or finished
+  hypothesis: Because a green checkout button stands out more, more visitors who reach the basket will place an order.
+  change: The checkout button is green instead of grey.
+  decision: Roll the green button out to all visitors, or keep the grey one.
+  owner: Head of ecommerce
+  unit: visitor
+  population: Visitors who reached the basket page on desktop or mobile web.
+  variants:
+    - {name: grey, role: control, planned_share: 0.5}
+    - {name: green, role: treatment, planned_share: 0.5}
+  primary_metric:
+    name: order rate
+    type: binary                # binary, continuous, or count
+    direction: increase         # the direction that is good
+    definition: Share of visitors who placed an order within the session.
+  secondary_metrics:
+    - {name: revenue per visitor, type: continuous, direction: increase, definition: Order value per visitor, zero when no order.}
+  guardrail_metrics:
+    - {name: refund rate, type: binary, direction: decrease, definition: Share of orders refunded within 14 days., max_harm: 0.2 percentage points}
+  mde: 0.5 percentage points on a 4% order rate
+  ship_rule: Ship if the order rate improves at the 5% level and the refund rate is not harmed by more than 0.2 points.
+  out_of_scope:
+    - Effects on returning visitors after the test ended.
+# One short paragraph per section, in plain sentences: why the answer is what it is. Shown above each decision cell.
+reasoning:
+  hypothesis: The design team expects the colour to draw attention, which is a testable claim about order rate.
+  decision: The button change is cheap, so a small but real improvement is enough to roll it out.
+  unit: Visitors were assigned by cookie, so the analysis counts visitors, not sessions or orders.
+  variants: The test was planned as an even split.
+  metrics: Order rate is the decision metric. Revenue per visitor is reported but cannot rescue a flat order rate.
+  success: The team agreed on 0.5 points as the smallest change worth the rollout and maintenance.
+risks:
+  - problem: The first metric proposed was clicks on the button, which can rise without more orders.
+    resolution: The primary metric is the order rate. Clicks are left out.
+assumptions:
+  - Visitors kept the same cookie for the whole test.
+open_questions:
+  - question: Did the tracking change during the test?
+    stage: validation
+decisions:
+  - decision: Order rate is the only primary metric.
+    reason: It is closest to revenue and the decision owner agreed.

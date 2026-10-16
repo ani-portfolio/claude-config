@@ -1,0 +1,8 @@
+# Python and OS files
+__pycache__/
+*.pyc
+.DS_Store
+.ipynb_checkpoints/
+# Installed packages and local copies
+node_modules/
+_backup/

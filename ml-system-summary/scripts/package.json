@@ -1,0 +1,10 @@
+{
+  "name": "ml-system-summary-scripts",
+  "private": true,
+  "type": "module",
+  "description": "Diagram export helpers for the ml-system-summary skill",
+  "dependencies": {
+    "@excalidraw/utils": "0.1.2",
+    "playwright": "1.63.0"
+  }
+}

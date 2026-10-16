@@ -1,0 +1,12 @@
+# Example plan for: iterate.py open <this file>
+# One iteration: why it happens, and what changes in which stage. The stage skills make the changes.
+hypothesis: CV overstated what media adds because the folds never covered a full year, and a straight trend cannot follow the post 2020 rise; longer folds and a post COVID slope should make CV match the test year and let media show its real effect.
+diagnosis:
+  - The champion and the no media model have the same test MAPE (0.140 and 0.138); their intervals overlap.
+  - The three 13 week validation windows cover October 2020 to July 2021 only.
+  - Every model under-predicts the test year by about 7,000 to 9,000 a week.
+changes:                       # stage: one of framing, eda, split, features, baseline, training, evaluation
+  - stage: split
+    change: Two expanding backtest folds of 26 weeks instead of three of 13, so validation covers a full year.
+  - stage: features
+    change: Add a post COVID slope (weeks since 2020-03-01) and a third Fourier pair.

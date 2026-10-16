@@ -1,0 +1,10 @@
+# A/B testing skills that keep copies of the files in _ab_shared/ (and nb_common.py from _ml_shared/). One folder
+# name per line: the workflow steps in order, then helper skills such as ab-status.
+ab-project-setup
+ab-test-framing
+ab-test-design
+ab-data-validation
+ab-analysis
+ab-segment-analysis
+ab-readout
+ab-status
