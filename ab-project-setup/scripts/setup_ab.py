@@ -206,7 +206,24 @@ def step_tracking(root, rep):
                  + " Run `setup_ab.py <folder> --add-tracking` once it is up.")
 
 
+def step_tracing(root, rep):
+    """Claude Code tracing into the test's experiment, with this skill's tracking.py (which reads ab_spec.yaml)."""
+    if rep.dry_run:
+        rep.did("trace Claude Code sessions in this project into its MLflow experiment")
+        return
+    tools = sp.skills_tools()
+    hook = f'python3 "{tools / "session_env.py"}"' if tools and (tools / "session_env.py").exists() else None
+    r = sp.run([str(sp.venv_python(root)), os.path.join(HERE, "tracking.py"), "tracing"] + ([hook] if hook else []),
+               cwd=str(root))
+    out = ((r.stdout or "") + (r.stderr or "")).strip()
+    if r.returncode == 0:
+        rep.did(out.splitlines()[-1] if out else "set up Claude Code tracing")
+    else:
+        rep.kept("Claude Code tracing not set up yet: " + out[-300:])
+
+
 sp.spec_value, sp.step_spec, sp.status, sp.step_tracking = spec_value, step_spec, status, step_tracking
+sp.step_tracing = step_tracing
 
 if __name__ == "__main__":
     sys.exit(sp.main())

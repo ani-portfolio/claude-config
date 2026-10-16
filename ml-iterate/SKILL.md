@@ -1,6 +1,6 @@
 ---
 name: ml-iterate
-description: Plan, track, and close an iteration of an ML project after the offline evaluation, a helper for the ML project skills. Diagnoses the evaluation and training results (test against CV, fold windows, bias, drift, weak slices, test set looks), agrees a hypothesis and the changes by stage with the user, snapshots the starting state to iterations/iter_N, records the iteration in the shared ml_spec.yaml, lists the stages to rerun in order and hands off to each stage skill with the user's agreement, carries the previous champion forward so it is scored on the same folds, guards a second look at the test set, and compares iterations at the end. Use after /ml-offline-evaluation when the user wants to improve the model, iterate, try again, or compare iterations.
+description: Plan, track, and close an iteration of an ML project after the offline evaluation, a helper for the ML project skills. Diagnoses the evaluation and training results (test against CV, fold windows, bias, drift, weak slices, test set looks), agrees a hypothesis and the changes by stage with the user, snapshots the starting state to iterations/iter_N, records the iteration in the shared ml_spec.yaml, starts the next version (V2, V3) on its own git branch with its own MLflow parent run, lists the stages to rerun in order and hands off to each stage skill with the user's agreement, carries the previous champion forward so it is scored on the same folds, guards a second look at the test set, and compares iterations at the end. Use after /ml-offline-evaluation when the user wants to improve the model, iterate, try again, or compare iterations.
 allowed-tools: Bash(python3 ${CLAUDE_SKILL_DIR}/scripts/*), Bash(.venv/bin/python ${CLAUDE_SKILL_DIR}/scripts/*)
 ---
 
@@ -18,7 +18,8 @@ It is a helper for the ML project skills, not a workflow step, and it does not r
 4. **Keep the history.** Snapshots are never deleted by the skill. A rollback backs up the current state first.
 5. **No raw data in the reply.** Use metrics, counts, and dates.
 6. **Use the script.** `scripts/iterate.py` does every write to the `iterations` section. Do not edit it by hand.
-7. **Writing style.** Use simple language and full sentences. Use plain headings. Do not use dashes as punctuation.
+7. **Never commit to main.** The script commits on the version branches only. Merging into main is the user's choice.
+8. **Writing style.** Use simple language and full sentences. Use plain headings. Do not use dashes as punctuation.
 
 ## Step 1: Find the project and the spec
 
@@ -76,6 +77,14 @@ PY ${CLAUDE_SKILL_DIR}/scripts/iterate.py open <plan.yaml>
 
 It saves the starting state to `iterations/iter_<N-1>/` and records the iteration in the `iterations` section. The snapshot holds the spec, notebooks, `src`, models, docs, and the small result files; large data files are not copied, and their sizes are listed in `manifest.json`. It adds a decision and prints the rerun order: the earliest changed stage, then every later modelling stage.
 
+**Versions.** Iteration N builds version V(N+1): the first pass is V1, iteration 1 builds V2. Opening the iteration also:
+
+* commits the current state and tags it with the version being left (`v1`);
+* creates the branch `ml/v2` from it and switches to it, so every stage build of the iteration is committed there;
+* creates the version's MLflow parent run (`experiment V2`). Every stage run of the iteration is logged as its child, tagged `version = V2` and `candidate = true`. The alias `champion` stays on the previous version's model until the iteration is kept.
+
+The script prints a line for each of these. When git or MLflow is not available, it says so and the iteration still opens.
+
 ## Step 5: Hand off stage by stage
 
 For each stage in the rerun order:
@@ -113,13 +122,18 @@ PY ${CLAUDE_SKILL_DIR}/scripts/iterate.py close --outcome <outcome> --reason "<w
 PY ${CLAUDE_SKILL_DIR}/scripts/iterate.py close --outcome <outcome> --reason "<why>" [--restore]
 ```
 
-`--restore` is required for `rolled_back`, and only after the user agreed. Then suggest `/ml-reconcile-notes`, because notes written in the earlier iteration may now disagree with the new decisions.
+`--restore` is required for `rolled_back`, and only after the user agreed.
+
+Closing settles the version:
+
+* **Kept or stopped:** the version is promoted in MLflow (its stage runs become the current ones, and the alias `champion` moves to its champion, which also keeps the alias `champion-v2`), and git tags the version `v2`. Work stays on `ml/v2`.
+* **Rolled back:** the version is marked rejected in MLflow, and the runs of the restored state are made current again. Git commits the restored files on `ml/v2`, tags it `v2-rolled-back`, switches back to `ml/v1`, and commits the spec there with the record of the rollback. The branch `ml/v2` is kept for the record. Then suggest `/ml-reconcile-notes`, because notes written in the earlier iteration may now disagree with the new decisions.
 
 ## Step 7: Report back
 
 Reply with these parts, in this order:
 
-1. **Files written:** the snapshot folder, `ml_spec.yaml`, and any backup folder.
+1. **Files written:** the snapshot folder, `ml_spec.yaml`, and any backup folder, then the version, its git branch and tag, and its MLflow parent run.
 2. **Summary:** the iteration's hypothesis and changes, then the `compare` table. Add two or three sentences: whether the new champion beats the carried old one on the same folds, and the test score with how many looks it took.
 3. **Problems:** stages that were not rerun, a carry forward that was not possible, and flags from the diagnosis that are still open, one sentence each.
 4. **Open questions:** one line each, with the stage that needs the answer.
@@ -127,4 +141,4 @@ Reply with these parts, in this order:
 
 ## The spec file
 
-`reference/spec_fields.md` describes the `iterations` section. `scripts/ml_common.py` and `scripts/nb_common.py` are copies of the canonical files in `claude-skills/_ml_shared/`, kept in sync by `tools/sync_ml_shared.py`.
+`reference/spec_fields.md` describes the `iterations` and `version` sections. `scripts/ml_common.py`, `scripts/nb_common.py`, `scripts/tracking.py`, and `scripts/git_ops.py` are copies of the canonical files in `claude-skills/_ml_shared/`, kept in sync by `tools/sync_ml_shared.py`.

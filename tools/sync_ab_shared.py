@@ -31,6 +31,7 @@ FILES = {
     "_ab_shared/ab_common.py": ("scripts/ab_common.py", None),
     "_ml_shared/nb_common.py": ("scripts/nb_common.py", None),
     "_ml_shared/tracking.py": ("scripts/tracking.py", None),
+    "_ml_shared/git_ops.py": ("scripts/git_ops.py", None),
     "_ab_shared/spec_fields.md": ("reference/spec_fields.md", None),
     "_ab_shared/ab_core.py": ("scripts/ab_core.py", STATS_SKILLS),
 }

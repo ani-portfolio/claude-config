@@ -42,6 +42,7 @@ FILES = {
     "split_core.py": ("scripts/split_core.py", SPLIT_SKILLS),
     "model_core.py": ("scripts/model_core.py", MODEL_SKILLS),
     "tracking.py": ("scripts/tracking.py", None),
+    "git_ops.py": ("scripts/git_ops.py", None),
 }
 
 

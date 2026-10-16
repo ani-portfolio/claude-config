@@ -236,7 +236,27 @@ def collect(spec, path):
         "iteration": iteration_state(spec),
         "eval_decision": (spec.get("evaluation") or {}).get("decision"),
         "tracking": tracking_state(spec),
+        "version": version_state(spec, root),
     }
+
+
+def version_state(spec, root):
+    """The version being worked on (V1, V2, ...), its git branch, the branch checked out, uncommitted files, and the
+    earlier versions with how each ended."""
+    v = spec.get("version") or {}
+    out = {"current": v.get("current") or "V1", "branch": v.get("branch") or "ml/v1",
+           "history": [{"version": h.get("version"), "status": h.get("status"), "superseded_by": h.get("superseded_by")}
+                       for h in v.get("history") or [] if h.get("version") != (v.get("current") or "V1")],
+           "git": None}
+    try:
+        import git_ops
+        if git_ops.is_repo(root):
+            st = git_ops.status(root)
+            out["git"] = {"branch": st["branch"], "last_commit": st["last_commit"], "on_main": st["on_protected"],
+                          "uncommitted": len(st["uncommitted"])}
+    except ImportError:
+        pass
+    return out
 
 
 def iteration_state(spec):
@@ -373,11 +393,33 @@ def print_table(r, explain=False):
     if tk and tk["missing"]:
         attention.append("No MLflow run is logged for " + ", ".join(tk["missing"])
                          + ". A run is logged the next time each of those notebooks runs with the server up.")
+    vs = r.get("version") or {}
+    g = vs.get("git")
+    if g is None and vs:
+        attention.append("The project is not a git repository, so the stage builds are not committed. Set it up with "
+                         "`/ml-project-setup` (`setup_project.py <folder> --add-git`).")
+    elif g and g["on_main"]:
+        attention.append("The project is on the main branch. The next stage build moves to "
+                         f"`{vs['branch']}` before it commits; the skills never commit to main.")
+    elif g and g["branch"] != vs["branch"]:
+        attention.append(f"The checked out branch is `{g['branch']}`, but the spec works on {vs['current']} "
+                         f"(`{vs['branch']}`). Stage builds commit to the branch that is checked out.")
     if attention:
         print("**Needs attention**")
         print()
         for a in attention:
             print(f"* {a}")
+        print()
+    if vs:
+        earlier = ", ".join(f"{h['version']} {str(h['status']).replace('_', ' ')}"
+                            + (f" (built on by {h['superseded_by']})" if h.get("superseded_by") else "")
+                            for h in vs["history"])
+        line = f"**Version:** {vs['current']} on branch `{vs['branch']}`"
+        if g and g.get("last_commit"):
+            line += f", last commit `{g['last_commit']}`"
+        if g and g.get("uncommitted"):
+            line += f", {g['uncommitted']} uncommitted file{'s' if g['uncommitted'] > 1 else ''}"
+        print(line + (f". Earlier versions: {earlier}." if earlier else "."))
         print()
     if tk:
         print(f"**MLflow:** experiment `{tk['experiment']}`" + (f", {tk['ui']}" if tk.get("ui") else "") + ".")

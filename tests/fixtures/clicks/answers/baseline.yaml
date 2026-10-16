@@ -1,0 +1,27 @@
+metrics:
+  primary:
+    key: pr_auc
+  secondary:
+  - roc_auc
+  - log_loss
+baselines:
+- name: base_rate
+  kind: non_ml
+  type: prior
+  params: {}
+  reason: Predict the average for every row. The floor every model must clear.
+- name: best_feature_i1
+  kind: non_ml
+  type: column
+  params:
+    column: i1
+    direction: higher
+  reason: Rank by i1 alone (higher first), the strongest single feature (score 0.5241).
+reference: null
+reasoning: {}
+risks: []
+assumptions: []
+open_questions: []
+decisions: []
+resolved_questions: []
+

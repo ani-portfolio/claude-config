@@ -547,6 +547,36 @@ def _summary(section, stage):
     return out
 
 
+def after_build(spec_path, stage, skill, answers_path=None):
+    """After a successful stage build: commit it on the version branch (never on main) and put the commit, the
+    branch, and the kept answers on the stage's MLflow run, so the run can be traced to exact code and rebuilt.
+    Returns {"commit", "branch"}; empty when git or tracking is not set up."""
+    root = os.path.dirname(os.path.abspath(spec_path))
+    spec = ml_common.load(spec_path)
+    out = {}
+    try:
+        import git_ops
+    except ImportError:
+        git_ops = None
+    if git_ops is not None and (spec.get("git") or {}).get("auto_commit", True) and git_ops.is_repo(root):
+        version = (spec.get("version") or {}).get("current") or "V1"
+        ref = (spec.get(stage) or {}).get("mlflow") or {}
+        sha = git_ops.commit_paths(root, git_ops.stage_paths(spec, root, stage, spec_path),
+                                   f"{version} {stage}: built by {skill}", spec,
+                                   trailers={"Version": version, "Stage": stage, "Skill": skill,
+                                             "MLflow-Run": ref.get("run_id"),
+                                             "Agent-Session": os.environ.get("ML_AGENT_SESSION")})
+        out = {"commit": sha or git_ops.head(root), "new_commit": bool(sha), "branch": git_ops.branch(root)}
+        if sha:
+            print(f"git: committed {stage} on {out['branch']} ({sha[:8]})", file=sys.stderr)
+    try:
+        import tracking
+        tracking.attach_build(spec_path, stage, answers_path, out)
+    except ImportError:
+        pass
+    return out
+
+
 def cli(main_fn, stage, skill):
     """Run a stage script's main(). Adds two things every stage script shares:
 
@@ -584,18 +614,24 @@ def cli(main_fn, stage, skill):
     except Exception:  # noqa: BLE001
         spec_path, spec = None, {}
     building = not (set(argv) & INFO_FLAGS)
-    saved = None
+    saved, built = None, {}
     if code == 0 and building and spec_path and os.path.exists(spec_path):
         try:
             saved = save_answers(os.path.dirname(spec_path), stage, skill, argv, _answers_files(argv))
         except Exception as e:  # noqa: BLE001  keeping the answers is a convenience
             print(f"Could not keep the answers: {e}", file=sys.stderr)
+        try:
+            built = after_build(spec_path, stage, skill, saved)
+        except Exception as e:  # noqa: BLE001  the build itself succeeded; say why it was not committed
+            print(f"Could not commit the build: {e}", file=sys.stderr)
+        spec = ml_common.load(spec_path)
     if as_json:
         root = os.path.dirname(spec_path) if spec_path else None
         print(json.dumps({"stage": stage, "skill": skill, "exit_code": code,
                           "exit_reason": EXIT_REASONS.get(code, "failed"), "error": error,
                           "notebook": ((spec.get("notebooks") or {}).get(stage) or {}).get("path"),
                           "spec": spec_path, "answers": ml_common.relpath(saved, root) if saved and root else None,
+                          "git": built or None,
                           "summary": _summary(spec.get(stage), stage) if building else None},
                          default=str, ensure_ascii=False))
     sys.exit(code)

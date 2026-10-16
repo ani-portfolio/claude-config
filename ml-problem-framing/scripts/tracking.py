@@ -21,6 +21,8 @@ Command line (with the project's Python, from the project root):
                                   and print its id
     tracking.py promote <experiment>    make an experiment's stage runs current and move the champion alias to it
     tracking.py reject <experiment> [reason]   mark an experiment as rejected (tags only)
+    tracking.py restore-current   make the runs the spec names current again (after a rollback)
+    tracking.py tracing [hook command]   trace Claude Code sessions in this project into its experiment
 
 Candidate mode. When ML_ITERATE_EXPERIMENT is set (ml-iterate sets it while it runs an experiment in a workspace),
 every stage run is logged as a child of the experiment's parent run (ML_ITERATE_PARENT_RUN), tagged candidate=true
@@ -491,17 +493,22 @@ def _register_champion(C, spec, root):
         for k, v in {"run_log_id": champ.get("run_id"), "data_version": tr.get("data_version"),
                      "project_root": root, "model_type": champ.get("type")}.items():
             client.set_model_version_tag(name, version, k, str(v))
-    cand = candidate()
+    cand = candidate(spec)
+    ver = current_version(spec)
     C.tags({"registered_model": name, "registered_version": version})
+    # Every version's champion keeps an alias of its own (champion-v1, champion-v2, ...), so versions can be
+    # loaded and compared
+    client.set_registered_model_alias(name, version_alias(ver), version)
+    client.set_model_version_tag(name, version, "version", ver)
     if cand:   # a candidate champion is registered but never takes the alias until its experiment is promoted
         if not reused:   # a version that already existed (the same model) keeps its own tags
             client.set_model_version_tag(name, version, "candidate", "true")
             client.set_model_version_tag(name, version, "experiment", cand["experiment"])
-        print(f"MLflow: candidate champion registered as {name} version {version} for experiment "
-              f"{cand['experiment']}; the alias 'champion' is unchanged.")
+        print(f"MLflow: candidate champion registered as {name} version {version} (alias {version_alias(ver)}) for "
+              f"{cand['experiment']}; the alias 'champion' is unchanged until the version is promoted.")
         return
     client.set_registered_model_alias(name, "champion", version)
-    print(f"MLflow: the champion is {name} version {version}, alias 'champion'.")
+    print(f"MLflow: the champion is {name} version {version}, aliases 'champion' and '{version_alias(ver)}'.")
 
 
 def _log_training(L, spec, root):
@@ -515,7 +522,8 @@ def _log_training(L, spec, root):
     L.metrics({"champion_" + label: champ.get(label), "champion_std": champ.get("std"),
                "champion_vs_reference_pct": champ.get("vs_reference_pct"),
                "train_score": (tr.get("checks") or {}).get("train_score"),
-               "cv_score": (tr.get("checks") or {}).get("cv_score")})
+               "cv_score": (tr.get("checks") or {}).get("cv_score"),
+               "v1_met": {"met": 1, "not_met": 0}.get((champ.get("v1") or {}).get("status"))})
     L.tags({"data_version": tr.get("data_version"), "v1_bar_met": champ.get("v1_bar_met"),
             "v1_status": (champ.get("v1") or {}).get("status"),
             "beats_best_baseline": champ.get("beats_best_baseline")})
@@ -556,6 +564,7 @@ def _log_evaluation(L, spec, root):
               **flat({k: v for k, v in (ev.get("slice_settings") or {}).items()}, "slices.")})
     L.tags({"test_opened": "true", "times_test_opened": len(ev.get("test_opened") or []),
             "v1_status": (ev.get("v1") or {}).get("status")})
+    L.metrics({"v1_met": {"met": 1, "not_met": 0}.get((ev.get("v1") or {}).get("status"))})
     rows = {r["model"]: r for r in ev.get("metrics") or []}
     c = rows.get(ev.get("champion")) or {}
     L.metrics({"test_" + label: c.get("test"), "test_low": c.get("low"), "test_high": c.get("high"),
@@ -725,13 +734,45 @@ if KIND == "ab":
 
 # ---------------------------------------------------------------- one run per stage notebook
 
-def candidate():
-    """The ml-iterate experiment this process runs for, from the environment, or None."""
+def candidate(spec=None):
+    """The version experiment this run belongs to, or None.
+
+    Two sources. A workspace run (an agent working on a copy of the project) sets ML_ITERATE_EXPERIMENT and the
+    parent run in the environment: its runs never become current. An iteration opened in the project itself by
+    ml-iterate is read from the spec (the open iteration's version and parent run), because each Claude Code
+    command starts a fresh shell: its runs become current, so MLflow keeps matching the spec, but stay candidates
+    until the iteration closes, and the alias 'champion' only moves when the version is promoted."""
     exp = os.environ.get("ML_ITERATE_EXPERIMENT")
-    if not exp:
+    if exp:
+        return {"experiment": exp, "iteration": os.environ.get("ML_ITERATE_ITERATION"),
+                "parent": os.environ.get("ML_ITERATE_PARENT_RUN"),
+                "agent_session": os.environ.get("ML_AGENT_SESSION"), "in_place": False}
+    it = (spec or {}).get("iterations") or {}
+    e = next((x for x in it.get("entries") or [] if x.get("id") == it.get("current") and x.get("status") == "open"),
+             None)
+    if not e:
         return None
-    return {"experiment": exp, "iteration": os.environ.get("ML_ITERATE_ITERATION"),
-            "parent": os.environ.get("ML_ITERATE_PARENT_RUN"), "agent_session": os.environ.get("ML_AGENT_SESSION")}
+    return {"experiment": e.get("version") or f"V{int(e['id']) + 1}", "iteration": e.get("id"),
+            "parent": e.get("mlflow_parent_run"), "agent_session": os.environ.get("ML_AGENT_SESSION"),
+            "in_place": True}
+
+
+def version_alias(version):
+    """The alias each version's champion keeps: champion-v1, champion-v2, ... MLflow reserves v1, v2 for itself."""
+    return f"champion-{str(version).lower()}"
+
+
+def current_version(spec):
+    """The version runs are logged for: V1 until ml-iterate opens V2, and so on."""
+    return str(((spec or {}).get("version") or {}).get("current") or "V1")
+
+
+def _git_branch(root):
+    try:
+        import git_ops
+        return git_ops.branch(root) if git_ops.is_repo(root) else None
+    except ImportError:
+        return None
 
 
 def _demote(client, exp_id, stage, keep_run_id):
@@ -766,7 +807,9 @@ def log_stage(spec_path, stage, notebook, skill):
         section = spec.get(stage) or {}
         tags = {"project": (spec.get("project") or {}).get("name"), "project_root": root, "stage": stage,
                 "skill": skill, "notebook": ml_common.relpath(notebook, root), "run_type": "stage",
-                "current": "false" if candidate() else "true",
+                "current": "false" if (candidate(spec) and not candidate(spec)["in_place"]) else "true",
+                "version": current_version(spec), "git_branch": _git_branch(root),
+                "agent_session": os.environ.get("ML_AGENT_SESSION"),
                 "data_version": (spec.get("training") or {}).get("data_version") if KIND == "ml" else None,
                 "workflow": KIND,
                 "spec_hash": hashlib.sha256(json.dumps(section, sort_keys=True, default=str).encode()).hexdigest()[:12],
@@ -775,7 +818,7 @@ def log_stage(spec_path, stage, notebook, skill):
         import warnings
         warnings.filterwarnings("ignore", module=r"mlflow\..*")
         logging.getLogger("mlflow").setLevel(logging.ERROR)
-        cand = candidate()
+        cand = candidate(spec)
         if cand:
             tags.update({"candidate": "true", "experiment": cand["experiment"], "iteration": cand["iteration"],
                          "agent_session": cand["agent_session"], "mlflow.parentRunId": cand["parent"]})
@@ -796,7 +839,7 @@ def log_stage(spec_path, stage, notebook, skill):
             status = "FAILED"
             _warn(f"logging the {stage} run stopped: {type(e).__name__}: {str(e)[:200]}")
         L.end(status)
-        if not cand:   # an experiment's run never displaces the project's current run; promote() does that
+        if not cand or cand["in_place"]:   # a workspace run never displaces the project's current run
             _demote(client, exp_id, stage, run.info.run_id)
         ref = {"run_id": run.info.run_id, "experiment_id": str(exp_id), "url": ui_link(uri, exp_id, run.info.run_id),
                "logged_at": _dt.datetime.now().replace(microsecond=0).isoformat()}
@@ -809,6 +852,90 @@ def log_stage(spec_path, stage, notebook, skill):
     except Exception as e:  # noqa: BLE001
         _warn(f"could not log the {stage} run: {type(e).__name__}: {str(e)[:300]}")
         return None
+
+
+def attach_build(spec_path, stage, answers_path=None, git_info=None):
+    """After a stage build: put the kept answers file and the git commit on the stage's run, so the run can be
+    rebuilt from MLflow alone and traced to exact code."""
+    try:
+        spec = ml_common.load(spec_path)
+        ref = (spec.get(stage) or {}).get("mlflow") or {}
+        if not ref.get("run_id"):
+            return
+        mlflow, uri = ready(spec)
+        if mlflow is None:
+            return
+        from mlflow.tracking import MlflowClient
+        client = MlflowClient()
+        if answers_path and os.path.exists(answers_path):
+            client.log_artifact(ref["run_id"], answers_path, "answers")
+        g = git_info or {}
+        for k, v in {"mlflow.source.git.commit": g.get("commit"), "git_commit": g.get("commit"),
+                     "git_branch": g.get("branch")}.items():
+            if v:
+                client.set_tag(ref["run_id"], k, str(v))
+    except Exception as e:  # noqa: BLE001  the build succeeded; this only adds links to it
+        _warn(f"could not add the answers or the commit to the {stage} run: {type(e).__name__}: {str(e)[:200]}")
+
+
+def restore_current(spec_path):
+    """Make the runs the spec names (spec[stage]['mlflow']) the current run of each stage again, for example after
+    ml-iterate rolled a version back to its snapshot. The alias 'champion' is not touched."""
+    client, exp_id, spec = _client_for(spec_path)
+    if client is None:
+        return None
+    done = []
+    for stage in LOGGED_STAGES:
+        rid = ((spec.get(stage) or {}).get("mlflow") or {}).get("run_id")
+        if not rid:
+            continue
+        try:
+            _demote(client, exp_id, stage, rid)
+            client.set_tag(rid, "current", "true")
+            done.append(stage)
+        except Exception as e:  # noqa: BLE001
+            _warn(f"could not make the {stage} run current again: {e}")
+    return done
+
+
+# ---------------------------------------------------------------- Claude Code tracing
+
+def setup_claude_tracing(root, uri, experiment_id, hook_command=None):
+    """Trace Claude Code sessions in this project into the project's experiment, with MLflow's Claude Code plugin
+    (`mlflow autolog claude`, which writes .claude/settings.json and .claude/settings.local.json). With
+    hook_command, also add a SessionStart hook that puts the session id in ML_AGENT_SESSION for every command, so
+    the runs a session logs carry its id. Returns (ok, message)."""
+    import shutil
+    import subprocess
+    cmd = None
+    for cand in (os.path.expanduser("~/.local/bin/mlflow"), shutil.which("mlflow")):
+        if cand and os.path.exists(cand):
+            cmd = [cand]
+            break
+    if cmd is None and shutil.which("uv"):
+        cmd = [shutil.which("uv"), "tool", "run", "mlflow"]
+    if cmd is None:
+        return False, "the mlflow command is not installed (uv tool install mlflow)"
+    env = {**os.environ, "MLFLOW_DISABLE_AGENT_HINT": "1", "MLFLOW_DISABLE_TELEMETRY": "true"}
+    r = subprocess.run(cmd + ["autolog", "claude", "-d", root, "-u", uri, "-e", str(experiment_id)],
+                       capture_output=True, text=True, env=env, timeout=300)
+    if r.returncode != 0:
+        return False, "mlflow autolog claude failed: " + (r.stderr or r.stdout).strip()[-300:]
+    if hook_command:
+        path = os.path.join(root, ".claude", "settings.json")
+        try:
+            with open(path, encoding="utf-8") as f:
+                settings = json.load(f)
+        except (OSError, ValueError):
+            settings = {}
+        starts = settings.setdefault("hooks", {}).setdefault("SessionStart", [])
+        present = any(h.get("command") == hook_command for m in starts for h in m.get("hooks") or [])
+        if not present:
+            starts.append({"hooks": [{"type": "command", "command": hook_command}]})
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(settings, f, indent=2)
+            f.write("\n")
+    return True, f"Claude Code sessions in this project are traced to experiment {experiment_id} on {uri}"
 
 
 def attach_notebook(notebook_path, stage, spec_path, since):
@@ -944,7 +1071,7 @@ def start_experiment(spec_path, experiment, hypothesis=None, tags=None):
     old = _parent_run(client, exp_id, experiment)
     if old:
         return old.info.run_id
-    t = {"run_type": "experiment", "experiment": experiment, "candidate": "true",
+    t = {"run_type": "experiment", "experiment": experiment, "candidate": "true", "version": experiment,
          "project": (spec.get("project") or {}).get("name"), "workflow": KIND,
          "iteration": os.environ.get("ML_ITERATE_ITERATION"), "agent_session": os.environ.get("ML_AGENT_SESSION"),
          "mlflow.note.content": hypothesis, **(tags or {})}
@@ -1021,6 +1148,18 @@ def main():
         sys.exit(status(spec_path))
     if cmd == "export":
         sys.exit(export(spec_path, args[1] if len(args) > 1 else None))
+    if cmd == "tracing":
+        spec = ml_common.migrate(ml_common.load(spec_path))
+        tr = spec.get("tracking") or {}
+        if not tr.get("experiment_id"):
+            sys.exit("Set up tracking first: tracking.py setup")
+        ok, msg = setup_claude_tracing(os.path.dirname(spec_path), tracking_uri(spec), tr["experiment_id"],
+                                       args[1] if len(args) > 1 else None)
+        print(msg)
+        sys.exit(0 if ok else 1)
+    if cmd == "restore-current":
+        print(json.dumps(restore_current(spec_path)))
+        sys.exit(0)
     if cmd in ("start-experiment", "promote", "reject"):
         if len(args) < 2:
             sys.exit(f"tracking.py {cmd} needs the experiment name.")

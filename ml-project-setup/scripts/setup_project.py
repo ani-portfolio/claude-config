@@ -280,6 +280,13 @@ __pycache__/
 .ruff_cache/
 .pytest_cache/
 .DS_Store
+
+# Copies the skills keep outside git (git history already holds every version)
+iterations/
+.iterate_backup/
+.reconcile_backup/
+mlflow_export/
+.claude/settings.local.json
 """
 
 
@@ -769,7 +776,10 @@ def step_spec(root, name, description, pyver, kernel, display, paths, rep):
             return
     values = {"project": {"name": name, "description": description, "python": pyver, "kernel": kernel,
                           "kernel_display": display},
-              "paths": paths}
+              "paths": paths,
+              # V1 is the first pass; ml-iterate opens V2, V3, ... Each version has its own git branch, ml/v<N>.
+              "version": {"current": "V1", "branch": "ml/v1", "history": []},
+              "git": {"auto_commit": True}}
     with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
         json.dump(values, f)
         tmp = f.name
@@ -803,6 +813,60 @@ def step_tracking(root, rep):
                  + " Run `setup_project.py <folder> --add-tracking` once it is up.")
 
 
+def skills_tools():
+    """The tools folder of the claude-skills folder this skill lives in (through the ~/.claude/skills link)."""
+    p = Path(os.path.realpath(__file__)).parents[2] / "tools"
+    return p if p.is_dir() else None
+
+
+def step_tracing(root, rep):
+    """Trace Claude Code sessions in this project into the project's MLflow experiment, and add the SessionStart
+    hook that gives every command the session id (ML_AGENT_SESSION), so runs and commits link to their trace."""
+    if rep.dry_run:
+        rep.did("trace Claude Code sessions in this project into its MLflow experiment")
+        return
+    tools = skills_tools()
+    hook = f'python3 "{tools / "session_env.py"}"' if tools and (tools / "session_env.py").exists() else None
+    script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tracking.py")
+    r = run([str(venv_python(root)), script, "tracing"] + ([hook] if hook else []), cwd=str(root))
+    out = ((r.stdout or "") + (r.stderr or "")).strip()
+    if r.returncode == 0:
+        rep.did(out.splitlines()[-1] if out else "set up Claude Code tracing")
+    else:
+        rep.kept("Claude Code tracing not set up yet: " + out[-300:] + " Run `setup_project.py <folder> --add-tracking` "
+                 "once the MLflow server is up.")
+
+
+SETUP_FILES = [".gitignore", "CLAUDE.md", "README.md", "pyproject.toml", "uv.lock", "requirements.txt",
+               ml_common.SPEC_NAME, "notebooks", "src", "docs", ".vscode/settings.json", ".claude/settings.json",
+               "data/raw/.gitkeep", "data/processed/.gitkeep", "models/.gitkeep"]
+
+
+def step_git(root, rep):
+    """A git repository with an empty first commit on main and the work on the version branch (ml/v1). Nothing is
+    ever committed to main: the skills commit each stage build on the version branch, and a person merges."""
+    if rep.dry_run:
+        rep.did("create a git repository (empty first commit on main) and commit the set up on branch ml/v1")
+        return
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import git_ops
+    spec = {}
+    try:
+        spec = ml_common.load(str(root / SPEC_FILE))
+    except (SystemExit, Exception):  # noqa: BLE001  no PyYAML here: the version defaults to V1
+        pass
+    new_repo = not git_ops.is_repo(str(root))
+    ok, msg = git_ops.init_repo(str(root), spec)
+    if not ok:
+        rep.problem(msg)
+        return
+    rep.did(msg)
+    paths = ["."] if new_repo else [p for p in SETUP_FILES if (root / p).exists()]
+    sha = git_ops.commit_paths(str(root), paths, "V1 setup: project set up by ml-project-setup", spec,
+                               trailers={"Version": "V1", "Stage": "setup", "Skill": "ml-project-setup"})
+    rep.did(f"commit the set up on {git_ops.branch(str(root))} ({sha[:8]})" if sha else "KEPT git: nothing new to commit")
+
+
 # ----------------------------------------------------------------------------- main
 
 def main():
@@ -826,6 +890,10 @@ def main():
                     help="append the ML workflow section to an existing CLAUDE.md that lacks it (ask the user first)")
     ap.add_argument("--no-tracking", action="store_true",
                     help="do not add mlflow or set up the project's MLflow experiment")
+    ap.add_argument("--no-git", action="store_true", help="do not create a git repository or commit the set up")
+    ap.add_argument("--no-tracing", action="store_true", help="do not trace Claude Code sessions into MLflow")
+    ap.add_argument("--add-git", action="store_true",
+                    help="in an existing project, only create the git repository and commit on the version branch")
     ap.add_argument("--add-tracking", action="store_true",
                     help="in an existing project, only add mlflow and set up its MLflow experiment")
     ap.add_argument("--dry-run", action="store_true", help="print what would happen and change nothing")
@@ -870,6 +938,19 @@ def main():
         or DEFAULT_PYTHON
     description = (a.description if a.description != DEFAULT_DESCRIPTION else None) or \
         ((spec_value(root, "project") or {}).get("description") if root.exists() else None)
+    if a.add_git:
+        if not (root / SPEC_FILE).exists():
+            sys.exit(f"ERROR: --add-git is for an existing project with {SPEC_FILE}. Run the full setup.")
+        gi = root / ".gitignore"
+        if gi.exists() and "iterations/" not in gi.read_text(encoding="utf-8"):
+            if not a.dry_run:
+                with open(gi, "a", encoding="utf-8") as f:
+                    f.write("\n# Copies the skills keep outside git\niterations/\n.iterate_backup/\n.reconcile_backup/\n"
+                            "mlflow_export/\n.claude/settings.local.json\n")
+            rep.did("add the skills' snapshot folders to .gitignore")
+        step_git(root, rep)
+        pyver = python_version(str(venv_python(root))) if venv_python(root).exists() else None
+        return finish(root, kernel_name(name), ml_common.kernel_display(name, pyver), pyver, rep, a.dry_run)
     if a.add_tracking:
         if not (root / SPEC_FILE).exists() or not venv_python(root).exists():
             sys.exit(f"ERROR: --add-tracking is for an existing project with {SPEC_FILE} and .venv. Run the full setup.")
@@ -880,6 +961,10 @@ def main():
             step_install(root, uv, mode, rep)
         step_claude_md_workflow(root, rep, True)
         step_tracking(root, rep)
+        if not a.no_tracing:
+            step_tracing(root, rep)
+        if not a.no_git:
+            step_git(root, rep)
         return finish(root, kernel_name(name), ml_common.kernel_display(name, pyver), pyver, rep, a.dry_run)
     paths = project_paths(root, rep)
     step_folders(root, paths, rep)
@@ -914,9 +999,13 @@ def main():
     step_spec(root, name, description, pyver, kernel, display, paths, rep)
     if not a.no_tracking and not a.no_install:
         step_tracking(root, rep)
+        if not a.no_tracing:
+            step_tracing(root, rep)
 
     if not a.no_install:
         step_verify(root, kernel, rep)
+    if not a.no_git:
+        step_git(root, rep)   # last, so the commit holds everything the set up wrote
     return finish(root, kernel, display, pyver, rep, a.dry_run)
 
 

@@ -1,0 +1,36 @@
+metrics:
+  primary:
+    key: recall_at_k
+    k: 50
+    k_per: scoring_date
+  secondary:
+  - pr_auc
+  - roc_auc
+  - log_loss
+baselines:
+- name: current_rule
+  kind: non_ml
+  type: rule
+  params:
+    expression: days_since_last_order > 30
+  reason: 'Today''s approach as a rule on the columns: A rule flags customers with
+    no order in the last 30 days.'
+- name: base_rate
+  kind: non_ml
+  type: prior
+  params: {}
+  reason: Predict the average for every row. The floor every model must clear.
+- name: best_feature_days_since_last_order
+  kind: non_ml
+  type: column
+  params:
+    column: days_since_last_order
+    direction: higher
+  reason: strongest single feature
+reasoning: {}
+risks: []
+assumptions: []
+open_questions: []
+decisions: []
+resolved_questions: []
+reference: null

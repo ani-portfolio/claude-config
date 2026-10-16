@@ -51,6 +51,162 @@ SMALL_RESULTS = ["cv_folds.parquet", "baseline_cv_results.parquet", "baseline_oo
                  "evaluation_metrics.parquet", "evaluation_slices.parquet"]
 
 
+# ---------------------------------------------------------------- versions: git and MLflow
+#
+# V1 is the first pass. Opening iteration N starts version V(N+1): the previous version gets its git tag (v1), a
+# branch ml/v(N+1) is made from it, and an MLflow parent run is created for the version, so every stage run of the
+# iteration is logged under it (tracking.candidate reads the open iteration from the spec). Closing the iteration
+# settles the version everywhere: kept or stopped promotes it in MLflow (the alias 'champion' moves to its champion)
+# and tags v<N+1>; rolled back rejects it, makes the restored runs current again, tags v<N+1>-rolled-back, and goes
+# back to the previous version's branch. Nothing is ever committed to main.
+
+def _git():
+    try:
+        import git_ops
+        return git_ops
+    except ImportError:
+        return None
+
+
+def _tracking():
+    try:
+        import tracking
+        return tracking
+    except ImportError:
+        return None
+
+
+def _version(spec):
+    v = spec.get("version") or {}
+    v.setdefault("current", "V1")
+    v.setdefault("branch", "ml/v1")
+    v.setdefault("history", [])
+    spec["version"] = v
+    return v
+
+
+def _vnum(name):
+    try:
+        return int(str(name).lstrip("Vv"))
+    except ValueError:
+        return 1
+
+
+def _commit(root, spec, spec_path, message, extra=()):
+    g = _git()
+    if g is None or not g.is_repo(root) or not (spec.get("git") or {}).get("auto_commit", True):
+        return None
+    return g.commit_paths(root, [spec_path, *extra], message, spec,
+                          trailers={"Version": _version(spec)["current"], "Skill": SKILL,
+                                    "Agent-Session": os.environ.get("ML_AGENT_SESSION")})
+
+
+def _start_version(spec, root, spec_path, entry):
+    """Tag the version being left, branch the new one, and create its MLflow parent run. Returns notes."""
+    notes = []
+    v = _version(spec)
+    prev, new = v["current"], f"V{entry['id'] + 1}"
+    g = _git()
+    if g is not None and g.is_repo(root):
+        pp = ml_common.project_paths(spec, root)
+        _commit(root, spec, spec_path, f"{prev}: state before {new} was opened",
+                [pp["notebooks"], pp["src"], pp["docs"], os.path.join(root, "answers")])
+        if g.tag(root, prev.lower(), f"{prev}: the state iteration {entry['id']} started from"):
+            notes.append(f"git: tagged {prev.lower()}")
+        target = f"ml/{new.lower()}"
+        if g.branch_exists(root, target):
+            g.git(root, "switch", "-q", target)
+        else:
+            g.git(root, "switch", "-q", "-c", target)
+        notes.append(f"git: working on branch {target}")
+    old = next((h for h in v["history"] if h.get("version") == prev), None)
+    if old is None:   # V1, or a version from before versions were recorded: it was the working version, so kept
+        old = {"version": prev, "branch": v.get("branch"), "status": "kept",
+               "champion": entry["start"].get("champion"), "cv": entry["start"].get("cv"),
+               "test": entry["start"].get("test"), "git_tag": prev.lower()}
+        v["history"].append(old)
+    old.update({"superseded_by": new, "superseded_at": _now()})
+    v.update({"current": new, "branch": f"ml/{new.lower()}", "previous": prev})
+    entry["version"] = new
+    entry["previous_version"] = prev
+    return notes
+
+
+def _version_parent_run(spec_path, entry):
+    t = _tracking()
+    if t is None:
+        return None
+    try:
+        return t.start_experiment(spec_path, entry["version"], entry["hypothesis"],
+                                  tags={"iteration": entry["id"], "previous_version": entry.get("previous_version"),
+                                        "changes": "; ".join(f"{c['stage']}: {c['change']}" for c in entry["changes"])[:5000]})
+    except Exception as ex:  # noqa: BLE001  tracking never blocks the work
+        print(f"MLflow: could not create the parent run of {entry['version']}: {ex}", file=sys.stderr)
+        return None
+
+
+def _settle_version(spec, root, spec_path, entry, outcome, reason):
+    """Close the version in MLflow and git. Returns notes."""
+    notes = []
+    v = _version(spec)
+    ver = entry.get("version") or v["current"]
+    t = _tracking()
+    if t is not None:
+        try:
+            if outcome == "rolled_back":
+                t.reject(spec_path, ver, reason)
+                done = t.restore_current(spec_path)
+                notes.append(f"MLflow: {ver} rejected; the restored runs are current again ({', '.join(done or []) or 'none'})")
+            else:
+                res = t.promote(spec_path, ver)
+                if res:
+                    notes.append(f"MLflow: {ver} promoted" + (f"; alias champion is version {res['champion_version']}"
+                                                              if res.get("champion_version") else ""))
+        except Exception as ex:  # noqa: BLE001
+            notes.append(f"MLflow: could not settle {ver}: {ex}")
+    status = {"kept": "kept", "stopped": "kept (stopped iterating)", "rolled_back": "rolled_back"}[outcome]
+    v["history"] = [h for h in v["history"] if h.get("version") != ver] + [
+        {"version": ver, "branch": f"ml/{ver.lower()}", "status": status, "closed_at": _now(), "reason": reason,
+         "champion": (entry.get("end") or {}).get("champion"), "cv": (entry.get("end") or {}).get("cv"),
+         "test": (entry.get("end") or {}).get("test"), "mlflow_parent_run": entry.get("mlflow_parent_run"),
+         "git_tag": ver.lower() + ("-rolled-back" if outcome == "rolled_back" else "")}]
+    if outcome == "rolled_back":
+        prev = entry.get("previous_version") or "V1"
+        v.update({"current": prev, "branch": f"ml/{prev.lower()}"})
+        for h in v["history"]:   # the previous version is the working version again
+            if h.get("version") == prev:
+                h.pop("superseded_by", None)
+                h.pop("superseded_at", None)
+    return notes, ver
+
+
+def _settle_git(spec, root, spec_path, entry, outcome, ver, restored_files):
+    g = _git()
+    notes = []
+    if g is None or not g.is_repo(root):
+        return notes
+    paths = ml_common.project_paths(spec, root)
+    extra = [os.path.join(root, f) for f in restored_files or []] + [paths["notebooks"], paths["src"], paths["docs"],
+                                                                     os.path.join(root, "answers")]
+    sha = _commit(root, spec, spec_path, f"{ver} closed: {outcome.replace('_', ' ')}", extra)
+    tag = ver.lower() + ("-rolled-back" if outcome == "rolled_back" else "")
+    if g.tag(root, tag, f"{ver} closed as {outcome}"):
+        notes.append(f"git: tagged {tag}" + (f" ({sha[:8]})" if sha else ""))
+    if outcome == "rolled_back":
+        prev_branch = f"ml/{(entry.get('previous_version') or 'V1').lower()}"
+        if g.branch_exists(root, prev_branch):
+            text = ml_common.dump_text(spec)   # the record of the rolled back version, kept on the previous branch
+            r = g.git(root, "switch", "-q", prev_branch)
+            if r.returncode == 0:
+                with open(spec_path, "w", encoding="utf-8") as f:
+                    f.write(text)
+                _commit(root, spec, spec_path, f"Record that {ver} was rolled back")
+                notes.append(f"git: back on {prev_branch}")
+            else:
+                notes.append(f"git: could not switch back to {prev_branch}: {(r.stderr or '').strip()[:200]}")
+    return notes
+
+
 # ---------------------------------------------------------------- helpers
 
 def _now():
@@ -349,13 +505,26 @@ def open_iteration(spec, root, spec_path, plan, dry_run=False):
     if dry_run:
         return {"ok": True, "dry_run": True, "entry": entry, "files": _snapshot_files(spec, root, spec_path)}
     copied, skipped = snapshot(spec, root, spec_path, dest)
+    notes = _start_version(spec, root, spec_path, entry)
     it["entries"].append(entry)
     it["current"] = n
-    _decision(spec, f"Opened iteration {n}: {entry['hypothesis']}",
+    _decision(spec, f"Opened iteration {n} ({entry['version']}): {entry['hypothesis']}",
               "Planned changes: " + "; ".join(f"{c['stage']}: {c['change']}" for c in changes))
-    ml_common.log(spec, SKILL, f"opened iteration {n}")
+    ml_common.log(spec, SKILL, f"opened iteration {n} as {entry['version']}")
     ml_common.save(spec_path, spec)
-    return {"ok": True, "entry": entry, "copied": len(copied), "skipped": skipped}
+    parent = _version_parent_run(spec_path, entry)
+    if parent:
+        spec = ml_common.load(spec_path)
+        for x in _iters(spec)["entries"]:
+            if x.get("id") == n:
+                x["mlflow_parent_run"] = parent
+                entry["mlflow_parent_run"] = parent
+        _version(spec)["mlflow_parent_run"] = parent
+        ml_common.save(spec_path, spec)
+        notes.append(f"MLflow: {entry['version']} parent run {parent[:8]}; every stage run of the iteration is logged under it")
+    if _commit(root, spec, spec_path, f"{entry['version']} opened: {entry['hypothesis']}"):
+        notes.append(f"git: committed the opening of {entry['version']}")
+    return {"ok": True, "entry": entry, "copied": len(copied), "skipped": skipped, "notes": notes}
 
 
 def remaining(spec):
@@ -480,16 +649,22 @@ def close_iteration(spec, root, spec_path, outcome, reason, do_restore=False, dr
     it = _iters(spec)
     it["entries"] = [closed if x.get("id") == e["id"] else x for x in it["entries"]]
     it["current"] = None
-    backup = None
+    backup, manifest = None, None
+    version_state = _version(spec)
     if outcome == "rolled_back":
         stamp = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
         backup = os.path.join(root, ".iterate_backup", stamp)
         snapshot(spec, root, spec_path, backup)
-        spec, _ = restore(root, os.path.join(root, e["snapshot"]), it)
-    _decision(spec, f"Closed iteration {e['id']}: {outcome.replace('_', ' ')}.", reason.strip())
+        spec, manifest = restore(root, os.path.join(root, e["snapshot"]), it)
+        spec["version"] = version_state   # the version record continues; the snapshot's is older
+    _decision(spec, f"Closed iteration {e['id']} ({e.get('version', '')}): {outcome.replace('_', ' ')}.", reason.strip())
     ml_common.log(spec, SKILL, f"closed iteration {e['id']} ({outcome})")
     ml_common.save(spec_path, spec)
-    return {"ok": True, "entry": closed, "backup": ml_common.relpath(backup, root) if backup else None}
+    notes, ver = _settle_version(spec, root, spec_path, closed, outcome, reason.strip())
+    ml_common.save(spec_path, spec)
+    notes += _settle_git(spec, root, spec_path, closed, outcome, ver, (manifest or {}).get("copied"))
+    return {"ok": True, "entry": closed, "backup": ml_common.relpath(backup, root) if backup else None,
+            "notes": notes}
 
 
 def record_carry(spec, spec_path, cf):
@@ -540,7 +715,9 @@ def main():
             print(f"Dry run. Iteration {e['id']} would save {len(res['files'])} files to {e['snapshot']}/ and rerun: "
                   + " → ".join(e["rerun"]) + ".")
             return
-        print(f"Opened iteration {e['id']}: {e['hypothesis']}")
+        print(f"Opened iteration {e['id']} as {e.get('version')}: {e['hypothesis']}")
+        for n_ in res.get("notes") or []:
+            print("  " + n_)
         print(f"Snapshot: {e['snapshot']}/ ({res['copied']} files; large data files not copied: "
               + (", ".join(res["skipped"]) or "none") + ")")
         print("Rerun, in this order: " + " → ".join(f"/{ml_common.STAGE_SKILL[s]}" for s in e["rerun"]))
@@ -616,6 +793,8 @@ def main():
         if res.get("backup"):
             print(f"Restored {e['snapshot']}/. The state before the rollback is in {res['backup']}/. The split and "
                   "feature tables were not in the snapshot: rerun the split and features notebooks to rebuild them.")
+        for n_ in res.get("notes") or []:
+            print("  " + n_)
         if not res.get("dry_run"):
             print("Next: /ml-reconcile-notes to align the notes, then /ml-status.")
 

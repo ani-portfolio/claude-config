@@ -1,0 +1,18 @@
+data_path: data/raw/clicks.csv
+target: target
+task_type: binary_classification
+target_code: null
+split:
+  strategy: random
+  test_size: 0.2
+  stratify: true
+  cv:
+    n_folds: 5
+  duplicates: keep_together
+  missing_target: drop
+  seed: 42
+reasoning:
+  strategy: 'There is no time order or repeated entity to respect, so rows are assigned at random. Classification:
+    every set keeps the same class balance (stratified). EDA found 59 exact duplicate rows. They are kept together
+    on one side, so a copy of a test row is never in training.'
+

@@ -16,6 +16,8 @@
 | `split`, `features`, `baseline`, `training`, `evaluation` | the skill for that stage | later skills |
 | `review` | ml-review | ml-status |
 | `tracking` | ml-project-setup | every stage that logs to MLflow, ml-status, ml-review |
+| `version` | ml-project-setup (V1), then ml-iterate | every stage that logs or commits, ml-status |
+| `git` | ml-project-setup | `nb_common.cli`, ml-iterate |
 | `notebooks` | `nb_common.py`, when a stage notebook runs | ml-status |
 | `assumptions`, `open_questions`, `decisions` | any skill, append only | all |
 | `history` | `ml_common.py` | people |
@@ -327,9 +329,31 @@ Each entry:
 | `carried_forward` | The previous champion as it was added to the new training run: `name`, `type`, `params`, `inputs`, and whether its inputs still exist. |
 | `status` | `open` or `closed`. |
 | `outcome`, `reason` | `kept` (the new state stays), `rolled_back` (the snapshot was restored), or `stopped` (no further change is worth making), and why. |
+| `version`, `previous_version` | The version this iteration builds (iteration N builds V(N+1)) and the version it started from. |
+| `mlflow_parent_run` | The MLflow run of the version (`run_type = experiment`). Every stage run of the iteration is logged as its child. |
 | `end` | The state it ended with: `champion`, `cv`, `test`, `test_look`, `data_version`, and `carried_forward_cv` (the carried champion's CV score on the new folds, when it was trained). |
 
 Opening and closing an iteration also add an entry to `decisions` with stage `iteration`.
+
+## version
+
+Written by ml-project-setup (V1) and by ml-iterate when an iteration opens or closes.
+
+| Field | Meaning |
+|---|---|
+| `current` | The version being worked on: `V1` for the first pass, then `V2`, `V3`, and so on. Stage runs and commits are tagged with it. |
+| `branch` | Its git branch, `ml/v1`, `ml/v2`, and so on. |
+| `previous` | The version the current one was built from. |
+| `mlflow_parent_run` | The MLflow run of the current version, from V2 on. |
+| `history` | One entry per earlier or closed version: `version`, `branch`, `status` (`kept`, `kept (stopped iterating)`, or `rolled_back`), `superseded_by` (the version built on it, when there is one), `champion`, `cv`, `test`, `reason`, `mlflow_parent_run`, and `git_tag`. |
+
+## git
+
+Written by ml-project-setup.
+
+| Field | Meaning |
+|---|---|
+| `auto_commit` | True by default: every successful stage build commits the stage's files on the version branch, and ml-iterate commits when it opens or closes a version. Set it to false to commit by hand. |
 
 ## tracking
 
@@ -340,7 +364,7 @@ Written by ml-project-setup (`tracking.py setup`), or by the first stage that lo
 | `uri` | The MLflow tracking address, normally the shared server `http://127.0.0.1:5000`. `MLFLOW_TRACKING_URI` overrides it for a shell. |
 | `experiment`, `experiment_id` | The project's experiment, `ml/<project>`. |
 | `ui` | The link to the experiment in the MLflow UI. |
-| `registered_model` | The registry name of the champion, `<project>-champion`; the current champion has the alias `champion`. |
+| `registered_model` | The registry name of the champion, `<project>-champion`. The current champion has the alias `champion`, and each version's champion keeps the alias `champion-v1`, `champion-v2`, and so on (MLflow reserves `v1` for itself). |
 
 ## mlflow, in each stage section
 

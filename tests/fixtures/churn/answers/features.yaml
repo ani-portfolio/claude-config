@@ -1,0 +1,45 @@
+config:
+  numeric:
+  - orders_90d
+  - spend_90d
+  - days_since_last_order
+  categorical:
+  - plan
+  - region
+  high_cardinality: []
+  date_parts: {}
+  days_since: []
+  log:
+  - spend_90d
+  ratios: []
+  lags: []
+  rolling: []
+  custom: true
+  date_col: scoring_date
+  target: lapsed_60d
+  min_shift_days: 0
+  target_min_shift_days: 60
+  rare_min_frequency: 0.01
+  exclude: []
+excluded:
+  customer_id: 'entity ID: identifies the row, so it is not a feature (it keeps the split grouped)'
+  scoring_date: the prediction date itself; with under 400 days of history, month or week would take values in the
+    test period that training never saw
+  email: 'excluded in the ML framing: personal data'
+  refund_after_cancel: 'excluded in the ML framing: recorded after the outcome'
+feature_reasons:
+  orders_90d: numeric, timing before prediction
+  spend_90d: numeric, timing before prediction
+  log_spend_90d: log of `spend_90d`, which is strongly skewed (helps linear models)
+  days_since_last_order: numeric, timing before prediction
+  plan: categorical, 3 values
+  region: categorical, 5 values
+leakage_threshold: 0.9
+confirmed_safe: []
+reasoning: {}
+risks: []
+assumptions: []
+open_questions: []
+decisions: []
+resolved_questions: []
+

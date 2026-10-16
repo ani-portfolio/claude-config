@@ -6,3 +6,8 @@ __pycache__/
 # Installed packages and local copies
 node_modules/
 _backup/
+
+# Stray links made by running ln -s twice
+ml-baseline-model/ml-baseline-model
+ml-problem-framing/ml-problem-framing
+ml-status/ml-status

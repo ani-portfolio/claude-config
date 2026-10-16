@@ -1,6 +1,6 @@
 ---
 name: ml-project-setup
-description: Set up a new or existing Python ML project folder, the first stage of the ML project skills. Uses uv to create a .venv and manage packages in pyproject.toml and uv.lock, creates the standard folders (data/raw, data/processed, notebooks, src, models, docs), the shared ml_spec.yaml that the later skills read and write, CLAUDE.md with the ML workflow, README.md, and .gitignore, sets up the project's MLflow experiment on the shared tracking server, and registers the .venv as a named Jupyter kernel with VS Code settings so editors always pick this project's Python. Also repairs projects where VS Code or Jupyter picks the wrong kernel. Use when asked to set up, scaffold, start, or initialize a project, or to fix a project's environment or kernel.
+description: Set up a new or existing Python ML project folder, the first stage of the ML project skills. Uses uv to create a .venv and manage packages in pyproject.toml and uv.lock, creates the standard folders (data/raw, data/processed, notebooks, src, models, docs), the shared ml_spec.yaml that the later skills read and write, CLAUDE.md with the ML workflow, README.md, and .gitignore, sets up the project's MLflow experiment on the shared tracking server, traces Claude Code sessions into it, makes the folder a git repository with work on the branch ml/v1 (never main), and registers the .venv as a named Jupyter kernel with VS Code settings so editors always pick this project's Python. Also repairs projects where VS Code or Jupyter picks the wrong kernel. Use when asked to set up, scaffold, start, or initialize a project, or to fix a project's environment or kernel.
 allowed-tools: Bash(python3 ${CLAUDE_SKILL_DIR}/scripts/*), Bash(.venv/bin/python ${CLAUDE_SKILL_DIR}/scripts/*)
 ---
 
@@ -40,6 +40,8 @@ The script uses [uv](https://docs.astral.sh/uv/) to create `.venv`, record packa
 | `.vscode/settings.json` | Points VS Code at `.venv` and runs notebooks from the project root. Merged into an existing file. |
 | Jupyter kernel | Registered under the project name (for example `martech_adtech_data`), shown as "`<name>` (.venv, Python 3.11.x)". |
 | MLflow tracking | `mlflow` is added to the dependencies, and the project gets its own experiment, `ml/<project>`, on the shared MLflow server. The address, the experiment, and the UI link are written to the `tracking` section of the spec. Skip with `--no-tracking`. |
+| Claude Code tracing | `mlflow autolog claude` writes `.claude/settings.json` and `.claude/settings.local.json`, so every Claude Code session in the project is traced into the project's experiment. A SessionStart hook (`tools/session_env.py` in the claude-skills folder) puts the session id in `ML_AGENT_SESSION`, and runs and commits are tagged with it. Skipped with `--no-tracking`. |
+| Git repository | A new repository gets one empty commit on main ("Initialize repository"), then the branch `ml/v1` with a commit of the set up files. In an existing repository, only the set up files are committed, on `ml/v1` when main is checked out, or on the branch already checked out otherwise. The spec gets `version: {current: V1, branch: ml/v1}` and `git: {auto_commit: true}`. Skip with `--no-git`. |
 | Editable install | `uv sync` installs the project itself in editable mode (hatchling build), so `from src.utils import x` works from notebooks, scripts, and tests in any folder, and new modules under `src/` work without reinstalling. |
 
 **Existing dependency files.**
@@ -93,6 +95,16 @@ python3 ~/Projects/claude-skills/tools/mlflow_server.py install-agent   # macOS:
 
 **Older projects.** `setup_project.py <folder> --add-tracking` only adds `mlflow`, updates the ML workflow section of CLAUDE.md, and creates the experiment. Ask the user first, because it changes `pyproject.toml` and CLAUDE.md. Stage notebooks get their MLflow cell the next time their skill rebuilds them.
 
+## Versions and git
+
+Every project is a git repository, and every pass at the model is a version: V1 is the first pass, and each iteration opened with **ml-iterate** builds the next one (V2, V3). Each version has its own branch, `ml/v1`, `ml/v2`. **Nothing is ever committed to main**: main holds only the empty first commit, and the user merges a version into main when they want to.
+
+After setup, every successful stage build commits the stage's files on the version branch (the spec, the stage notebook, the kept answers, `src`, and `docs`), with the message `V1 <stage>: built by <skill>`. Data, models, and `.venv` are ignored. `git.auto_commit: false` in the spec turns the commits off.
+
+Commits use the user's git identity. When `git config user.name` or `user.email` is not set, the script commits nothing and reports a problem: give the user the two `git config --global` commands it printed, and rerun with `--add-git` after they set them.
+
+**Older projects.** `setup_project.py <folder> --add-git` makes the folder a repository (or moves an existing one off main) and commits the set up files. `--add-tracking` also adds the Claude Code tracing and the git set up. Ask the user first.
+
 ## Step 3: Preview, then run
 
 Run a dry run first and check that it creates only what you expect:
@@ -107,7 +119,7 @@ Then run it for real, with the same options. Resolving and installing packages t
 python3 ${CLAUDE_SKILL_DIR}/scripts/setup_project.py <path> --description "<sentence>" [--extras a,b]
 ```
 
-Other options: `--name` sets a project name that differs from the folder name, `--python 3.12` (or a path) picks the Python for a new `.venv`, `--no-install` creates files, folders, `.venv`, and the `pyproject.toml` entries without resolving or installing packages, and `--no-notebook` skips the starter notebook, and `--no-tracking` leaves out MLflow.
+Other options: `--name` sets a project name that differs from the folder name, `--python 3.12` (or a path) picks the Python for a new `.venv`, `--no-install` creates files, folders, `.venv`, and the `pyproject.toml` entries without resolving or installing packages, and `--no-notebook` skips the starter notebook, `--no-tracking` leaves out MLflow and the Claude Code tracing, and `--no-git` leaves out the git repository.
 
 ## Step 4: Handle problems
 
@@ -119,6 +131,8 @@ The script exits with code 1 and a "Problems" list when something needs the user
 * **`CLAUDE.md` has no ML workflow section.** This happens in projects set up before the ML project skills. Ask the user, then rerun with `--update-claude-md`, which appends the section and changes nothing else.
 * **`CLAUDE.md` has an older ML workflow section.** The skills changed since the project was set up, for example the notebook names. Ask the user, then rerun with `--update-claude-md`, which replaces that section only.
 * **MLflow tracking not set up yet.** The shared server was not running. This is not an error. Give the user the server setup from the "MLflow tracking" section, then rerun with `--add-tracking`.
+* **git has no user name or email.** Nothing was committed. Give the user the two `git config --global` commands from the problem, and rerun with `--add-git` once they are set.
+* **The mlflow command is not installed**, so Claude Code sessions are not traced. Tracking of runs still works. Give the user `uv tool install mlflow`, then rerun with `--add-tracking`.
 * **uv is not installed.** The script stopped before changing anything. Give the user the install command from the "uv" section, and rerun after they install it.
 * **`pyproject.toml` has no `[project]` table.** Tell the user the base packages were not added, and offer to add a `[project]` table with the Edit tool.
 * **`uv add` or installing failed.** Show the error. Common causes are no network, a version pin in `pyproject.toml` that conflicts with a base package, or a package with no build for this Python version.
@@ -137,8 +151,8 @@ If the script printed that the spec was written as JSON (packages were not insta
 
 Reply with these parts, in this order:
 
-1. **Files written:** the project path, the Python version, the dependency file (`pyproject.toml` with `uv.lock`, or `requirements.txt`), and the kernel name and display name, then what was created and what already existed and was kept, in a short list.
+1. **Files written:** the project path, the git branch and the set up commit, the Python version, the dependency file (`pyproject.toml` with `uv.lock`, or `requirements.txt`), and the kernel name and display name, then what was created and what already existed and was kept, in a short list.
 2. **Summary:** one or two sentences on the state of the project.
 3. **Problems:** anything from Step 4 that is still open, one sentence each, or say there are none.
 4. **Open questions:** none are expected at this stage. Say so only if the spec lists some.
-5. **Next step:** commit `pyproject.toml` and `uv.lock` if the project uses git, open the folder on its own in VS Code (File, Open Folder) so it reads `.vscode/settings.json`, run the first cell of the starter notebook to confirm the kernel, put the input data in `data/raw/`, and then run the **ml-business-framing** skill. It asks only business questions, so it can run before the data is in place.
+5. **Next step:** say which branch the work is on (`ml/v1`) and that each stage build is committed there, open the folder on its own in VS Code (File, Open Folder) so it reads `.vscode/settings.json`, run the first cell of the starter notebook to confirm the kernel, put the input data in `data/raw/`, and then run the **ml-business-framing** skill. It asks only business questions, so it can run before the data is in place.

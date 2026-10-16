@@ -1,0 +1,76 @@
+spec_version: 1
+project:
+  name: regress-clicks
+  description: null
+  owner: null
+  python: null
+  created: '2026-10-09T11:02:39'
+  updated: '2026-10-16T14:53:38'
+paths:
+  data_raw: data/raw
+  data_processed: data/processed
+  notebooks: notebooks
+  src: src
+  models: models
+  docs: docs
+business:
+  status: confirmed
+  business_goal: null
+  business_kpi: null
+  decision_supported: null
+  users: null
+  capacity: null
+  current_approach: null
+  outcome: null
+  output_use: null
+  v1_bar_intent: null
+  ml_needed: 'yes'
+  ml_needed_reason: null
+  constraints:
+    latency: null
+    interpretability: null
+    fairness: null
+    data_access: null
+    other: []
+  out_of_scope: []
+  risks: []
+discovery: {}
+framing:
+  status: confirmed
+  task_type: binary_classification
+  target:
+    name: target
+    definition: null
+    positive_class: null
+    outcome_window: null
+    exists_in_data: true
+    construction: null
+    label_delay: null
+  unit_of_prediction: null
+  entity_id_cols: []
+  population: null
+  prediction_time:
+    description: null
+    column: null
+    feature_cutoff: null
+    cadence: null
+    horizon: null
+  success:
+    primary_metric: null
+    secondary_metrics: []
+    v1_bar: null
+    guardrails: []
+data:
+  sources: []
+  date_col: null
+  id_cols: []
+  excluded_cols: []
+eda:
+  mode: targeted
+  source: data/raw/clicks.csv
+  duplicate_rows: 59
+assumptions: []
+open_questions: []
+decisions: []
+notebooks: {}
+history: []

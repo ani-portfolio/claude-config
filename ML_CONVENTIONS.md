@@ -81,9 +81,29 @@ Every project logs the runs of its modelling stages to MLflow, so runs can be br
 2. **The spec decides; MLflow records.** Decisions live in the spec and the notebooks, and the parquet run log stays the cache that stops models from retraining. MLflow is a view on top: nothing reads a decision back from it.
 3. **Tracking never blocks the work.** When `mlflow` is not installed or the server is down, the notebook prints one line and finishes. ml-status and ml-review report the gap.
 4. **One experiment per project**, `ml/<project>` (A/B projects: `ab/<project>`, see `AB_CONVENTIONS.md`), created by ml-project-setup and tagged with the project folder. **One run per stage notebook run**, from split onwards and for reviews, tagged with the project, stage, skill, notebook, and data version. The newest run of each stage has the tag `current = true`. Baselines, models, and evaluated models are child runs.
-5. **What is logged** is read from the stage's spec section after the notebook writes it (`tracking.log_stage`, in the cells from `nb_common.tracking_cells`): settings as parameters, results as metrics, small tables as CSV, every chart the notebook showed, the stage's spec section, and the executed notebook. Training logs each model's best trial only (every trial stays in the run log), and registers the champion as `<project>-champion` with the alias `champion`. The run id goes to `<stage>.mlflow` in the spec.
+5. **What is logged** is read from the stage's spec section after the notebook writes it (`tracking.log_stage`, in the cells from `nb_common.tracking_cells`): settings as parameters, results as metrics, small tables as CSV, every chart the notebook showed, the stage's spec section, and the executed notebook. Training logs each model's best trial only (every trial stays in the run log), and registers the champion as `<project>-champion` with the alias `champion` and the version alias `champion-v1`, `champion-v2`, and so on. The run id goes to `<stage>.mlflow` in the spec.
 6. **Archiving a project.** `tracking.py export` copies the project's runs and artifacts into `mlflow_export/` in the project.
 7. MLflow's usage reporting to its makers is turned off (`MLFLOW_DISABLE_TELEMETRY`).
+
+## Versions and git
+
+Every project is a git repository, and every pass at the model is a version.
+
+1. **Versions.** The first pass through the workflow is V1. Each iteration opened with ml-iterate builds the next version: iteration 1 builds V2, iteration 2 builds V3. `spec.version` holds the current version, its branch, and the history of earlier versions.
+2. **Nothing is committed to main.** ml-project-setup makes the repository with one empty commit on main ("Initialize repository") and does all work on the branch `ml/v1`. Each version has its own branch, `ml/v2`, `ml/v3`, branched from the version before it. A person merges into main when they want to; the skills never do. When a stage build finds main checked out, it moves to the version branch before it commits.
+3. **Automatic commits.** After every successful stage build, `nb_common.cli` commits the stage's files: the spec, the stage notebook, the kept answers, `src`, and `docs`. Only these paths are committed, so a person's other changes stay out. Data, models, `.venv`, snapshots, and MLflow exports are ignored by `.gitignore`. Each commit message is `<version> <stage>: built by <skill>`, with trailers for the version, stage, skill, MLflow run, and Claude Code session. `git.auto_commit: false` in the spec turns this off.
+4. **Opening and closing a version.** ml-iterate tags the version it leaves (`v1`), branches `ml/v2`, and creates the version's MLflow parent run. Closing as kept or stopped promotes the version in MLflow and tags `v2`. Rolling back restores the snapshot, rejects the version in MLflow, tags `v2-rolled-back`, and goes back to the previous branch, where it commits the spec with the record of the rollback.
+5. **The git identity** is the person's own (`git config user.name` and `user.email`). Without one, nothing is committed and setup says how to set it.
+6. `_ml_shared/git_ops.py` holds the git helpers; `git_ops.py status` prints the branch, the last commit, and uncommitted files.
+
+## Agent observability
+
+Claude Code sessions in a project are traced into the project's own MLflow experiment, next to its runs.
+
+1. **Traces.** ml-project-setup runs `mlflow autolog claude` for the project. It writes `.claude/settings.json` (the tracking address and experiment id) and `.claude/settings.local.json` (MLflow's Claude Code tracing plugin). Every session in the project then appears as a trace in the experiment's Traces tab.
+2. **Linking runs to sessions.** The setup also adds a SessionStart hook, `tools/session_env.py`, that puts the session id in `ML_AGENT_SESSION` for every command of the session. Stage runs are tagged `agent_session` with it, and commits carry an `Agent-Session` trailer, so a run, its commit, and the trace of the session that made it can be found from each other.
+3. **Versions in MLflow.** Every stage run is tagged with `version`, `git_branch`, and `git_commit`, and logs the kept answers as an artifact. From V2 on, the runs of a version are children of the version's parent run and are tagged `candidate` until the version closes. The alias `champion` moves only when a version is kept.
+4. **Testing.** `tests/run_regression.py` runs the modelling stages on the fixtures in `tests/fixtures` against a throwaway MLflow store, and with `--iterate` also tests a kept V2 and a rolled back V3. Run it after changing the shared files.
 
 ## SKILL.md structure
 

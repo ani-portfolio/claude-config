@@ -1,0 +1,234 @@
+# Data dictionary drafted by the ml-data-discovery skill from column names and the data.
+# It is written by notebooks/02_data_discovery.ipynb. To change an entry, add it to the dictionary_answers
+# cell of that notebook and run it again, so the notebook and this file stay the same.
+sources:
+  customers:
+    path: data/raw/customers.csv
+    description: One row per customer per weekly scoring date.
+    columns:
+      - column: customer_id
+        type: int64
+        role: identifier
+        unique: 3972
+        missing_pct: 0.0
+        meaning: Customer ID.
+        meaning_source: name
+        timing: identifier
+        timing_basis: it is an identifier
+        flags: []
+        needs_review: false
+        notes: null
+      - column: scoring_date
+        type: str
+        role: date stored as text
+        unique: 52
+        missing_pct: 0.0
+        meaning: Scoring date (from 2025-01-06 to 2025-12-29).
+        meaning_source: name
+        timing: event_time
+        timing_basis: a date or timestamp of an event
+        flags: []
+        needs_review: false
+        notes: null
+      - column: orders_90d
+        type: int64
+        role: numeric
+        unique: 14
+        missing_pct: 0.0
+        meaning: Orders over the last 90 days.
+        meaning_source: name
+        timing: before_prediction
+        timing_basis: the name contains '_90d', which usually describes history up to a point in time
+        flags: []
+        needs_review: false
+        notes: null
+      - column: spend_90d
+        type: float64
+        role: numeric
+        unique: 17304
+        missing_pct: 0.0
+        meaning: Spend over the last 90 days.
+        meaning_source: name
+        timing: before_prediction
+        timing_basis: the name contains '_90d', which usually describes history up to a point in time
+        flags: []
+        needs_review: false
+        notes: null
+      - column: days_since_last_order
+        type: int64
+        role: numeric
+        unique: 120
+        missing_pct: 0.0
+        meaning: Days since last order.
+        meaning_source: name
+        timing: before_prediction
+        timing_basis: the name contains 'since', which usually describes history up to a point in time
+        flags: []
+        needs_review: false
+        notes: null
+      - column: plan
+        type: str
+        role: categorical
+        unique: 3
+        missing_pct: 0.0
+        meaning: Plan (3 distinct values).
+        meaning_source: name
+        timing: static
+        timing_basis: the name contains 'plan', which usually describes a stable attribute
+        flags: []
+        needs_review: false
+        notes: null
+      - column: region
+        type: str
+        role: categorical
+        unique: 5
+        missing_pct: 0.0
+        meaning: Region (5 distinct values).
+        meaning_source: name
+        timing: static
+        timing_basis: the name contains 'region', which usually describes a stable attribute
+        flags: []
+        needs_review: false
+        notes: null
+      - column: email
+        type: str
+        role: personal data
+        unique: 3972
+        missing_pct: 0.0
+        meaning: Email.
+        meaning_source: name
+        timing: static
+        timing_basis: personal data about the entity; it is kept out of the features in any case
+        flags:
+          - personal_data
+        needs_review: false
+        notes: null
+      - column: refund_after_cancel
+        type: float64
+        role: numeric
+        unique: 2178
+        missing_pct: 0.0
+        meaning: Refund after cancel.
+        meaning_source: name
+        timing: possibly_after_outcome
+        timing_basis: it looks like an outcome; if it is the target, it is only known after the prediction
+        flags:
+          - candidate_target
+        needs_review: true
+        notes: null
+      - column: lapsed_60d
+        type: int64
+        role: numeric
+        unique: 2
+        missing_pct: 0.0
+        meaning: Lapsed (over a 60 day window).
+        meaning_source: name
+        timing: possibly_after_outcome
+        timing_basis: it looks like an outcome; if it is the target, it is only known after the prediction
+        flags:
+          - candidate_target
+        needs_review: true
+        notes: null
+  orders:
+    path: data/raw/orders.parquet
+    description: null
+    columns:
+      - column: order_id
+        type: int64
+        role: identifier
+        unique: 27469
+        missing_pct: 0.0
+        meaning: Order ID.
+        meaning_source: name
+        timing: identifier
+        timing_basis: it is an identifier
+        flags: []
+        needs_review: false
+        notes: null
+      - column: customer_id
+        type: int64
+        role: identifier
+        unique: 4266
+        missing_pct: 0.0
+        meaning: Customer ID.
+        meaning_source: name
+        timing: identifier
+        timing_basis: it is an identifier
+        flags: []
+        needs_review: false
+        notes: null
+      - column: order_ts
+        type: str
+        role: date stored as text
+        unique: 7675
+        missing_pct: 0.0
+        meaning: Order timestamp (from 2025-01-01 to 2025-12-26).
+        meaning_source: name
+        timing: event_time
+        timing_basis: a date or timestamp of an event
+        flags: []
+        needs_review: false
+        notes: null
+      - column: amt
+        type: float64
+        role: numeric
+        unique: 11863
+        missing_pct: 0.0
+        meaning: Amount.
+        meaning_source: name
+        timing: at_event
+        timing_basis: 'assumed: a plain attribute in a table with one row per event is recorded with the event'
+        flags: []
+        needs_review: false
+        notes: null
+      - column: mcc
+        type: int64
+        role: numeric
+        unique: 3
+        missing_pct: 0.0
+        meaning: Merchant category code.
+        meaning_source: name
+        timing: static
+        timing_basis: the name contains 'mcc', which usually describes a stable attribute
+        flags: []
+        needs_review: false
+        notes: null
+      - column: c14
+        type: int64
+        role: numeric
+        unique: 9
+        missing_pct: 0.0
+        meaning: Internal channel code of the order.
+        meaning_source: user
+        timing: at_event
+        timing_basis: given in the notebook
+        flags: []
+        needs_review: false
+        notes: null
+      - column: refund_dt
+        type: str
+        role: date stored as text
+        unique: 1
+        missing_pct: 95.12
+        meaning: Refund date (from 2025-06-01 to 2025-06-01).
+        meaning_source: name
+        timing: possibly_after_outcome
+        timing_basis: the name contains 'refund', which usually describes something that happens later
+        flags:
+          - possibly_after_outcome
+          - mostly_missing
+          - constant
+        needs_review: true
+        notes: null
+      - column: txn_cnt_7d
+        type: int64
+        role: numeric
+        unique: 10
+        missing_pct: 0.0
+        meaning: Transaction count over the last 7 days.
+        meaning_source: name
+        timing: before_prediction
+        timing_basis: the name contains 'n_', which usually describes history up to a point in time
+        flags: []
+        needs_review: false
+        notes: null
