@@ -15,7 +15,7 @@ reference/spec_fields.md, and scripts/nb_common.py.
 
 <One paragraph: what this stage produces and why it matters for a V1 model.>
 
-This is step <number> of the ML project skills: ml-project-setup, ml-business-framing, ml-data-discovery, ml-problem-framing, ml-eda-report, ml-train-test-split, ml-feature-engineering, ml-baseline-model, ml-model-training, and ml-offline-evaluation. Every stage reads `ml_spec.yaml` first and writes only its own section. The shared conventions are in `ML_CONVENTIONS.md` in the claude-skills folder.
+This is step <number> of the ML project skills: ml-project-setup, ml-business-framing (anchors only), ml-data-discovery, ml-business-framing (full framing), ml-problem-framing, ml-eda-report, ml-train-test-split, ml-feature-engineering, ml-baseline-model, ml-model-training, and ml-offline-evaluation. Every stage reads `ml_spec.yaml` first and writes only its own section. The shared conventions are in `ML_CONVENTIONS.md` in the claude-skills folder.
 
 ## Ground rules
 

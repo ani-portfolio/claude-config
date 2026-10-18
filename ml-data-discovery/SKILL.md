@@ -12,7 +12,7 @@ Find out what the data is and how it comes about, so the ML framing can be built
 * `docs/data_dictionary.yaml`: the data dictionary, written by the notebook.
 * The `discovery` section of `ml_spec.yaml`, the entries in `data.sources`, and grouped open questions, also written by the notebook.
 
-This is step 3 of the ML project skills: ml-project-setup, ml-business-framing, **ml-data-discovery**, ml-problem-framing, ml-eda-report, then ml-train-test-split, ml-feature-engineering, ml-baseline-model, ml-model-training, and ml-offline-evaluation. Every skill reads `ml_spec.yaml` first and writes only its own section. The shared conventions are in `ML_CONVENTIONS.md` in the claude-skills folder.
+This is step 3 of the ML project skills: ml-project-setup, ml-business-framing (anchors only), **ml-data-discovery**, ml-business-framing (full framing), ml-problem-framing, ml-eda-report, then ml-train-test-split, ml-feature-engineering, ml-baseline-model, ml-model-training, and ml-offline-evaluation. Every skill reads `ml_spec.yaml` first and writes only its own section. The shared conventions are in `ML_CONVENTIONS.md` in the claude-skills folder.
 
 Data discovery describes the data as it is. It does not pick a target and it does not study which features predict anything: that waits for ml-eda-report, after ml-problem-framing has confirmed the target.
 
@@ -37,14 +37,14 @@ PY ${CLAUDE_SKILL_DIR}/scripts/ml_common.py status
 PY ${CLAUDE_SKILL_DIR}/scripts/ml_common.py paths
 ```
 
-Read `business` too. The business outcome (`business.outcome`) tells you which source the model will most likely use and which columns may relate to the outcome. If the business framing is not done, say that ml-business-framing normally comes first, and continue if the user wants.
+Read `business` too. Only the mode and the two anchors come before discovery: the goal and the decision (`business_goal`, `decision_supported`) for a standard project, or the learning question and the answer actions (`learning_question`, `answer_actions`) for an exploratory one. They tell you which source the model will most likely use and which columns may relate to the outcome. If the anchors are not done, say that the anchors pass of ml-business-framing normally comes first, and continue if the user wants. The rest of the business framing is drafted from what this skill finds, in the full pass of ml-business-framing that comes next.
 
 ## Step 2: Choose the sources
 
 List the files in the `data_raw` folder (names and sizes only, for example with `ls -la`). Then ask one question at a time, one AskUserQuestion call per question, and wait for each answer before asking the next, leaving out what the request already answers:
 
 1. **Which files to include** (`multiSelect: true`), when there are several. Recommend all data files, and leave out obvious extras such as lookup tables only if the user agrees.
-2. **The main source:** the one the model will most likely be trained on, for example the table with one row per customer and scoring date. Recommend the one that best fits `business.outcome`, otherwise the largest. The framing hints describe this source.
+2. **The main source:** the one the model will most likely be trained on, for example the table with one row per customer and scoring date. Recommend the one that best fits the anchors (`decision_supported` or `business_goal`, or `learning_question`), then `business.outcome` if an older spec has it, otherwise the largest. The framing hints describe this source.
 
 Give each source a short name if the file names are long or unclear (passed with `--names`).
 
@@ -97,7 +97,7 @@ and rebuild with the same files and options plus `--answers <file>`. If the user
 
 ## Step 5: Check the spec
 
-The notebook already wrote the `discovery` section, the `data.sources` entries, and grouped open questions (unclear columns, columns that may be recorded after the outcome, joins that need checking, and business framing still to do), and closed dictionary questions that are now answered. Check them with `PY ${CLAUDE_SKILL_DIR}/scripts/ml_common.py status`. Do not change `framing` or `data.excluded_cols`: excluding columns is decided in ml-problem-framing.
+The notebook already wrote the `discovery` section, the `data.sources` entries, and grouped open questions (unclear columns, columns that may be recorded after the outcome, joins that need checking, and the business anchors when they are still missing), and closed dictionary questions that are now answered. Check them with `PY ${CLAUDE_SKILL_DIR}/scripts/ml_common.py status`. Do not change `framing` or `data.excluded_cols`: excluding columns is decided in ml-problem-framing.
 
 ## Step 6: Report back
 
@@ -107,7 +107,7 @@ Reply with these parts, in this order. Do not paste the notebook, and do not inc
 2. **Summary:** for each source, one or two sentences on its size, grain, and date coverage. Then the joins, one sentence each.
 3. **Problems:** gaps or thin months, stale data, joins that multiply rows or match poorly, and the High severity quality issues, one sentence each.
 4. **Open questions:** the dictionary columns still flagged (how many, and the most important by name), and the other open questions in the spec, one line each with the stage that needs the answer.
-5. **Next step:** say that the user can check every finding in the notebook, and can answer flagged columns in its `dictionary_answers` cell and choose Run All. Then answer the columns that may be recorded after the outcome, and run the **ml-problem-framing** skill, which proposes the target, unit of prediction, prediction time, and window from these findings.
+5. **Next step:** say that the user can check every finding in the notebook, and can answer flagged columns in its `dictionary_answers` cell and choose Run All. Then answer the columns that may be recorded after the outcome, and run **ml-business-framing** again for the full pass, which drafts the rest of the business framing from these findings. After that, run **ml-problem-framing**, which proposes the target, unit of prediction, prediction time, and window.
 
 ## The spec file
 

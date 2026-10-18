@@ -69,7 +69,15 @@ def _context(spec):
     """Markdown describing the business framing and discovery findings this framing builds on."""
     b, d = spec.get("business") or {}, spec.get("discovery") or {}
     lines = []
-    if b:
+    if b and b.get("mode") == "exploratory":
+        acts = "; ".join(f"{a.get('answer')} then {a.get('action')}" for a in b.get("answer_actions") or []
+                         if isinstance(a, dict))
+        lines += ["* **Mode:** exploratory, so V1 is compared with the best simple baseline, not a current approach",
+                  f"* **Learning question:** {b.get('learning_question') or 'not set'}",
+                  f"* **What each answer leads to:** {acts or 'not set'}",
+                  f"* **Outcome in business terms:** {b.get('outcome') or 'not set'}",
+                  f"* **Output use:** {b.get('output_use') or 'not set'}. **V1 bar intent:** {b.get('v1_bar_intent') or 'not set'}"]
+    elif b:
         lines += [f"* **Goal:** {b.get('business_goal') or 'not set'}",
                   f"* **Decision:** {b.get('decision_supported') or 'not set'}"
                   + (f" (capacity: {b['capacity']})" if b.get("capacity") else ""),
@@ -118,7 +126,9 @@ from nb_common import load_table as load_data
                     "so it stays current when the earlier notebooks change."))
     cells.append(code('''
 business, discovery = spec.get("business") or {}, spec.get("discovery") or {}
-for key in ("business_goal", "decision_supported", "capacity", "outcome", "output_use", "v1_bar_intent", "current_approach"):
+keys = (("mode", "learning_question", "answer_actions") if business.get("mode") == "exploratory" else
+        ("business_goal", "decision_supported", "capacity", "current_approach"))
+for key in keys + ("outcome", "output_use", "v1_bar_intent"):
     print(f"{key}: {business.get(key)}")
 print(f"main source: {discovery.get('main_source')}")
 print("candidate targets: " + ", ".join(c["column"] for c in (discovery.get("framing_hints") or {}).get("candidate_targets", [])))

@@ -574,7 +574,9 @@ class Discovery:
             if j["notes"]:
                 qs.append((f"The join of {j['left']} and {j['right']} on {' + '.join(j['keys'])} is {j['relationship']}: "
                            + "; ".join(j["notes"]) + ". Is that expected?", "framing"))
-        if ((spec.get("business") or {}).get("status") or "not_started") == "not_started":
+        # Only the anchors come before discovery; the rest of the business framing is drafted from these findings
+        # next, which ml-status already shows as the next step.
+        if not ml_common.anchors_done(spec):
             qs.append((ml_common.BUSINESS_TODO, "business"))
         close_stale_questions(self.spec_path, qs)
         ml_common.update_section(self.spec_path, "discovery", summary, skill="ml-data-discovery", replace=True,

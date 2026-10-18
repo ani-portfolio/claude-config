@@ -1,6 +1,6 @@
 ---
 name: ml-model-training
-description: Build and tune the ML models of a project, step 9 of the ML project skills. Asks how many models to build, the type of each (logistic or ridge regression, decision tree, random forest, scikit-learn gradient boosting, LightGBM, XGBoost, CatBoost), and the questions that matter for each (tuning budget, class weights, fixed settings). Tunes each model with Optuna on the same CV folds and metrics as the baselines, logs every trial to a parquet run log, compares every model with the baselines, checks for leakage, overfitting, stability, and the V1 bar, and saves the champion (best mean CV score) refitted on the whole training set. Writes notebooks/08_training.ipynb; running the skill again adds models to the same notebook and only trains the new ones. Use after the baselines, or when asked to train, tune, compare, or add a model.
+description: Build and tune the ML models of a project, step 10 of the ML project skills. Asks how many models to build, the type of each (logistic or ridge regression, decision tree, random forest, scikit-learn gradient boosting, LightGBM, XGBoost, CatBoost), and the questions that matter for each (tuning budget, class weights, fixed settings). Tunes each model with Optuna on the same CV folds and metrics as the baselines, logs every trial to a parquet run log, compares every model with the baselines, checks for leakage, overfitting, stability, and the V1 bar, and saves the champion (best mean CV score) refitted on the whole training set. Writes notebooks/08_training.ipynb; running the skill again adds models to the same notebook and only trains the new ones. Use after the baselines, or when asked to train, tune, compare, or add a model.
 allowed-tools: Bash(python3 ${CLAUDE_SKILL_DIR}/scripts/*), Bash(.venv/bin/python ${CLAUDE_SKILL_DIR}/scripts/*)
 ---
 
@@ -15,7 +15,7 @@ The outputs are:
 * `models/champion_<name>.joblib`: the champion pipeline, refitted on every training row.
 * The `training` section of `ml_spec.yaml`.
 
-This is step 9 of the ML project skills: ml-project-setup, ml-business-framing, ml-data-discovery, ml-problem-framing, ml-eda-report, ml-train-test-split, ml-feature-engineering, ml-baseline-model, **ml-model-training**, then ml-offline-evaluation. Every skill reads `ml_spec.yaml` first and writes only its own section. The shared conventions are in `ML_CONVENTIONS.md` in the claude-skills folder. `reference/models.md` explains every model type, the tuning, the run log, and the checks.
+This is step 10 of the ML project skills: ml-project-setup, ml-business-framing (anchors only), ml-data-discovery, ml-business-framing (full framing), ml-problem-framing, ml-eda-report, ml-train-test-split, ml-feature-engineering, ml-baseline-model, **ml-model-training**, then ml-offline-evaluation. Every skill reads `ml_spec.yaml` first and writes only its own section. The shared conventions are in `ML_CONVENTIONS.md` in the claude-skills folder. `reference/models.md` explains every model type, the tuning, the run log, and the checks.
 
 ## Ground rules
 

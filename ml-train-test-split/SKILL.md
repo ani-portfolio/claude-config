@@ -1,6 +1,6 @@
 ---
 name: ml-train-test-split
-description: Split the data into a final test set and cross validation folds on the training set, step 6 of the ML project skills. Chooses the strategy from the confirmed ML framing (random stratified, grouped by entity, or by time with a gap and rolling backtest folds for forecasting and point in time predictions), checks the split for leakage, and saves train, test, and fold files as parquet. Writes notebooks/05_split.ipynb with the reasoning, editable decision cells, and pandas checks; running it writes the split section of the shared ml_spec.yaml. Use after the targeted EDA, or when asked to split data, set up cross validation or backtesting, or hold out a test set.
+description: Split the data into a final test set and cross validation folds on the training set, step 7 of the ML project skills. Chooses the strategy from the confirmed ML framing (random stratified, grouped by entity, or by time with a gap and rolling backtest folds for forecasting and point in time predictions), checks the split for leakage, and saves train, test, and fold files as parquet. Writes notebooks/05_split.ipynb with the reasoning, editable decision cells, and pandas checks; running it writes the split section of the shared ml_spec.yaml. Use after the targeted EDA, or when asked to split data, set up cross validation or backtesting, or hold out a test set.
 allowed-tools: Bash(python3 ${CLAUDE_SKILL_DIR}/scripts/*), Bash(.venv/bin/python ${CLAUDE_SKILL_DIR}/scripts/*)
 ---
 
@@ -15,7 +15,7 @@ Decide what "unseen data" means for this model, before any feature work. The out
 
 It also writes the `split` section of `ml_spec.yaml`. Cross validation on the training set is how later stages compare and tune models; the test set is not touched until the final evaluation.
 
-This is step 6 of the ML project skills: ml-project-setup, ml-business-framing, ml-data-discovery, ml-problem-framing, ml-eda-report, **ml-train-test-split**, then ml-feature-engineering, ml-baseline-model, ml-model-training, and ml-offline-evaluation. Every skill reads `ml_spec.yaml` first and writes only its own section. The shared conventions are in `ML_CONVENTIONS.md` in the claude-skills folder. `reference/strategies.md` explains every strategy, the gap, backtest folds, and the red flags.
+This is step 7 of the ML project skills: ml-project-setup, ml-business-framing (anchors only), ml-data-discovery, ml-business-framing (full framing), ml-problem-framing, ml-eda-report, **ml-train-test-split**, then ml-feature-engineering, ml-baseline-model, ml-model-training, and ml-offline-evaluation. Every skill reads `ml_spec.yaml` first and writes only its own section. The shared conventions are in `ML_CONVENTIONS.md` in the claude-skills folder. `reference/strategies.md` explains every strategy, the gap, backtest folds, and the red flags.
 
 ## Ground rules
 

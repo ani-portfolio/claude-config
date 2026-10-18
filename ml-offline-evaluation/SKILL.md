@@ -1,6 +1,6 @@
 ---
 name: ml-offline-evaluation
-description: Score the champion, every other ML model, and every baseline on the test set once, step 10 of the ML project skills. Shows each metric with a 95% bootstrap interval, paired comparisons against the reference and the best baseline, charts (gain curve with capacity, metric as k changes, ROC and precision recall, residuals, metric over time, calibration, slice dot plot), metrics sliced by proposed columns, test against CV, importance on test, and score drift. Ends with an evidence table and a model card; the go or no go decision stays with the user. Writes notebooks/09_evaluation.ipynb. Use after model training, or when asked to evaluate, test, or write a model card.
+description: Score the champion, every other ML model, and every baseline on the test set once, step 11 of the ML project skills. Shows each metric with a 95% bootstrap interval, paired comparisons against the reference and the best baseline, charts (gain curve with capacity, metric as k changes, ROC and precision recall, residuals, metric over time, calibration, slice dot plot), metrics sliced by proposed columns, test against CV, importance on test, and score drift. Ends with an evidence table and a model card; the go or no go decision stays with the user. Writes notebooks/09_evaluation.ipynb. Use after model training, or when asked to evaluate, test, or write a model card.
 allowed-tools: Bash(python3 ${CLAUDE_SKILL_DIR}/scripts/*), Bash(.venv/bin/python ${CLAUDE_SKILL_DIR}/scripts/*)
 ---
 
@@ -15,7 +15,7 @@ The outputs are:
 * `docs/model_card.md`: written from the spec. When the user edited it, the card is kept and `docs/model_card_new.md` is written next to it.
 * The `evaluation` section of `ml_spec.yaml`, including a record of every time the test set was opened.
 
-This is step 10 of the ML project skills: ml-project-setup, ml-business-framing, ml-data-discovery, ml-problem-framing, ml-eda-report, ml-train-test-split, ml-feature-engineering, ml-baseline-model, ml-model-training, **ml-offline-evaluation**. Every skill reads `ml_spec.yaml` first and writes only its own section. The shared conventions are in `ML_CONVENTIONS.md` in the claude-skills folder. `reference/evaluation.md` explains every table, chart, and check.
+This is step 11 of the ML project skills: ml-project-setup, ml-business-framing (anchors only), ml-data-discovery, ml-business-framing (full framing), ml-problem-framing, ml-eda-report, ml-train-test-split, ml-feature-engineering, ml-baseline-model, ml-model-training, **ml-offline-evaluation**. Every skill reads `ml_spec.yaml` first and writes only its own section. The shared conventions are in `ML_CONVENTIONS.md` in the claude-skills folder. `reference/evaluation.md` explains every table, chart, and check.
 
 ## Ground rules
 

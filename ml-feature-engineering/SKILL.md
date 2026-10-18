@@ -1,6 +1,6 @@
 ---
 name: ml-feature-engineering
-description: Build the features for an ML project, step 7 of the ML project skills. Proposes the model inputs from the data dictionary and column types, builds row and history features (calendar parts, days since, logs, ratios, lags and rolling windows with horizon rules) on the full timeline, and defines the learned steps as an unfitted linear or tree preprocessor (one hot or ordinal codes, TargetEncoder for high cardinality) that later stages fit inside each CV fold. Installs config driven src/features.py and a user owned src/custom_features.py, and writes notebooks/06_features.ipynb with leakage (single feature AUC), drift, history window, and fold fit checks; running it saves feature tables as parquet and the features section of ml_spec.yaml. Use after the split, or when asked to create, select, or check features.
+description: Build the features for an ML project, step 8 of the ML project skills. Proposes the model inputs from the data dictionary and column types, builds row and history features (calendar parts, days since, logs, ratios, lags and rolling windows with horizon rules) on the full timeline, and defines the learned steps as an unfitted linear or tree preprocessor (one hot or ordinal codes, TargetEncoder for high cardinality) that later stages fit inside each CV fold. Installs config driven src/features.py and a user owned src/custom_features.py, and writes notebooks/06_features.ipynb with leakage (single feature AUC), drift, history window, and fold fit checks; running it saves feature tables as parquet and the features section of ml_spec.yaml. Use after the split, or when asked to create, select, or check features.
 allowed-tools: Bash(python3 ${CLAUDE_SKILL_DIR}/scripts/*), Bash(.venv/bin/python ${CLAUDE_SKILL_DIR}/scripts/*)
 ---
 
@@ -16,7 +16,7 @@ The outputs are:
 * `features_train.parquet` and `features_test.parquet` in the processed data folder: the keys, the target, and every input before the learned steps.
 * The `features` section of `ml_spec.yaml`.
 
-This is step 7 of the ML project skills: ml-project-setup, ml-business-framing, ml-data-discovery, ml-problem-framing, ml-eda-report, ml-train-test-split, **ml-feature-engineering**, then ml-baseline-model, ml-model-training, and ml-offline-evaluation. Every skill reads `ml_spec.yaml` first and writes only its own section. The shared conventions are in `ML_CONVENTIONS.md` in the claude-skills folder. `reference/feature_rules.md` explains every rule used here.
+This is step 8 of the ML project skills: ml-project-setup, ml-business-framing (anchors only), ml-data-discovery, ml-business-framing (full framing), ml-problem-framing, ml-eda-report, ml-train-test-split, **ml-feature-engineering**, then ml-baseline-model, ml-model-training, and ml-offline-evaluation. Every skill reads `ml_spec.yaml` first and writes only its own section. The shared conventions are in `ML_CONVENTIONS.md` in the claude-skills folder. `reference/feature_rules.md` explains every rule used here.
 
 ## Ground rules
 

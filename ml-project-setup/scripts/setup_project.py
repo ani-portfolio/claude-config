@@ -145,7 +145,8 @@ SPEC_FILE = ml_common.SPEC_NAME
 WORKFLOW_SECTION = """## ML workflow
 This project uses the ML project skills. `ml_spec.yaml` at the project root is the shared record of every
 decision: read it before starting any modelling work, and never contradict it without asking the user.
-* Steps, in order: ml-project-setup, ml-business-framing, ml-data-discovery, ml-problem-framing, ml-eda-report,
+* Steps, in order: ml-project-setup, ml-business-framing (the mode and two anchors, before the data),
+  ml-data-discovery, ml-business-framing again (the rest, drafted from the data), ml-problem-framing, ml-eda-report,
   ml-train-test-split, ml-feature-engineering, ml-baseline-model, ml-model-training, ml-offline-evaluation.
 * Each step writes one numbered notebook in `notebooks/`: `01_business_framing.ipynb`, `02_data_discovery.ipynb`,
   `03_problem_framing.ipynb`, `04_eda_<dataset>.ipynb`, `05_split.ipynb`, `06_features.ipynb`, `07_baseline.ipynb`,
@@ -244,8 +245,9 @@ ml_spec.yaml       shared project spec: framing, data findings, and decisions
 
 ## Workflow
 
-The project follows the ML project skills: ml-project-setup, ml-business-framing, ml-data-discovery,
-ml-problem-framing, ml-eda-report, and then ml-train-test-split, ml-feature-engineering, ml-baseline-model,
+The project follows the ML project skills: ml-project-setup, ml-business-framing (the mode and two anchors),
+ml-data-discovery, ml-business-framing again (the rest, drafted from the data), ml-problem-framing, ml-eda-report,
+and then ml-train-test-split, ml-feature-engineering, ml-baseline-model,
 ml-model-training, and ml-offline-evaluation. Each step writes one numbered notebook (`01_business_framing.ipynb`
 to `09_evaluation.ipynb`) that holds its reasoning, decisions, and checks. Running a notebook records its
 decisions in `ml_spec.yaml`. Run `/ml-status` in Claude Code to see progress.

@@ -1,6 +1,6 @@
 ---
 name: ml-baseline-model
-description: Build the non ML baselines every model must beat, step 8 of the ML project skills. Offers the options for the task (the current business rule, the base rate or mean, the best single feature, a segment average, or naive, seasonal naive, and moving average forecasts) and scores them on the same CV folds the models will use, against the primary metric from the framing (including recall or precision at k per scoring date). Builds no ML models; those, simple and complex, belong to ml-model-training. Writes notebooks/07_baseline.ipynb; running it saves results and out of fold predictions as parquet and the baseline section of ml_spec.yaml with the reference to beat. Use after feature engineering, or when asked for a baseline, a benchmark, or how well today's rule performs.
+description: Build the non ML baselines every model must beat, step 9 of the ML project skills. Offers the options for the task (the current business rule, the base rate or mean, the best single feature, a segment average, or naive, seasonal naive, and moving average forecasts) and scores them on the same CV folds the models will use, against the primary metric from the framing (including recall or precision at k per scoring date). Builds no ML models; those, simple and complex, belong to ml-model-training. Writes notebooks/07_baseline.ipynb; running it saves results and out of fold predictions as parquet and the baseline section of ml_spec.yaml with the reference to beat. Use after feature engineering, or when asked for a baseline, a benchmark, or how well today's rule performs.
 allowed-tools: Bash(python3 ${CLAUDE_SKILL_DIR}/scripts/*), Bash(.venv/bin/python ${CLAUDE_SKILL_DIR}/scripts/*)
 ---
 
@@ -14,11 +14,11 @@ The outputs are:
 * `baseline_cv_results.parquet` (metrics per baseline and fold) and `baseline_oof_predictions.parquet` (out of fold predictions) in the processed data folder.
 * The `baseline` section of `ml_spec.yaml`: the metrics, the baseline definitions, the results, the reference, and the best baseline.
 
-This is step 8 of the ML project skills: ml-project-setup, ml-business-framing, ml-data-discovery, ml-problem-framing, ml-eda-report, ml-train-test-split, ml-feature-engineering, **ml-baseline-model**, then ml-model-training and ml-offline-evaluation. Every skill reads `ml_spec.yaml` first and writes only its own section. The shared conventions are in `ML_CONVENTIONS.md` in the claude-skills folder. `reference/baselines.md` explains every baseline, the reference, and every metric.
+This is step 9 of the ML project skills: ml-project-setup, ml-business-framing (anchors only), ml-data-discovery, ml-business-framing (full framing), ml-problem-framing, ml-eda-report, ml-train-test-split, ml-feature-engineering, **ml-baseline-model**, then ml-model-training and ml-offline-evaluation. Every skill reads `ml_spec.yaml` first and writes only its own section. The shared conventions are in `ML_CONVENTIONS.md` in the claude-skills folder. `reference/baselines.md` explains every baseline, the reference, and every metric.
 
 ## Ground rules
 
-1. **Never invent answers.** Today's rule comes from `business.current_approach`, written as an expression and confirmed by the user.
+1. **Never invent answers.** Today's rule comes from `business.current_approach`, written as an expression and confirmed by the user. An exploratory project (`business.mode` is `exploratory`) has no current approach, so there is no rule baseline, and the reference is the best baseline, which its V1 bar is measured against.
 2. **Non ML only.** If the user asks for an ML baseline here, explain that ML models, simple and complex, are built and compared in ml-model-training, starting with logistic or ridge regression.
 3. **Same folds, same inputs.** Baselines use the folds from the split and only columns a model may use. Columns excluded in the framing, and features the leakage check left out, are refused.
 4. **No test set.** The test set is used once, in ml-offline-evaluation.

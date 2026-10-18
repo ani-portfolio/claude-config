@@ -312,6 +312,20 @@ def psi(a, b, bins=10):
 
 # ---------------------------------------------------------------- model card
 
+def _purpose(bus):
+    """The Purpose section: the goal and decision, or for an exploratory project the learning question and what
+    each answer leads to. Which answer the result supports is left to the reader of the evidence."""
+    if bus.get("mode") != "exploratory":
+        return ["## Purpose", "", f"{bus.get('business_goal') or ''} {bus.get('decision_supported') or ''}".strip(), ""]
+    acts = [a for a in bus.get("answer_actions") or [] if isinstance(a, dict)]
+    L = ["## Purpose", "", f"An exploratory project. It should find out: {bus.get('learning_question') or 'not set'}", ""]
+    if acts:
+        L += ["| Answer | Action |", "|---|---|"] + [f"| {a.get('answer')} | {a.get('action')} |" for a in acts] + [""]
+    L += ["There is no current approach, so the champion is compared with the best simple baseline. The V1 check in "
+          "the evidence below says which answer the result supports, and the table above says what follows from it.", ""]
+    return L
+
+
 def model_card(spec, ev):
     """docs/model_card.md from the spec, after evaluation. Evidence only: the decision is the user's."""
     pr, bus, fr, sp, fe, tr = (spec.get(k) or {} for k in ("project", "business", "framing", "split", "features", "training"))
@@ -320,7 +334,7 @@ def model_card(spec, ev):
     L = [f"# Model Card: {pr.get('name')}", "",
          f"**Evaluated:** {ev['run_at'][:10]}  ",
          "**Source:** `notebooks/09_evaluation.ipynb`, written from `ml_spec.yaml`. Rerun the notebook to update it.", "",
-         "## Purpose", "", f"{bus.get('business_goal') or ''} {bus.get('decision_supported') or ''}".strip(), "",
+         *_purpose(bus),
          "## Model", "",
          f"* **Champion:** {champ.get('name')} ({champ.get('type')}), chosen by its mean CV score in model training.",
          f"* **Predicts:** {tgt.get('definition') or tgt.get('name')}",

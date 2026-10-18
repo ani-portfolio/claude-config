@@ -8,7 +8,7 @@ allowed-tools: Bash(python3 ${CLAUDE_SKILL_DIR}/scripts/*), Bash(.venv/bin/pytho
 
 Create a project folder with its own Python environment and the shared project spec, and make sure VS Code and Jupyter select that environment every time.
 
-This is the first step of the ML project skills: ml-project-setup, ml-business-framing, ml-data-discovery, ml-problem-framing, ml-eda-report, then ml-train-test-split, ml-feature-engineering, ml-baseline-model, ml-model-training, and ml-offline-evaluation. Every stage reads `ml_spec.yaml` first and writes only its own section. The conventions shared by all of them are in `ML_CONVENTIONS.md` in the claude-skills folder.
+This is the first step of the ML project skills: ml-project-setup, ml-business-framing (anchors only), ml-data-discovery, ml-business-framing (full framing), ml-problem-framing, ml-eda-report, then ml-train-test-split, ml-feature-engineering, ml-baseline-model, ml-model-training, and ml-offline-evaluation. Every stage reads `ml_spec.yaml` first and writes only its own section. The conventions shared by all of them are in `ML_CONVENTIONS.md` in the claude-skills folder.
 
 ## Ground rules
 
