@@ -12,8 +12,9 @@ Usage (from the project root, with the project's Python):
     make_notebook.py answers.yaml --new-version   # write 01_business_framing_v2.ipynb instead
     make_notebook.py --from-spec                  # rebuild from the business section already in the spec
 
-answers.yaml (see templates/business_answers.example.yaml): status, business (the fields), reasoning (one
-paragraph per section), risks, assumptions, open_questions, decisions.
+answers.yaml (see templates/business_answers.example.yaml, or business_answers_exploratory.example.yaml for an
+exploratory project): status, business (the fields, with mode), reasoning (one paragraph per section), risks,
+assumptions, open_questions, decisions. Before data discovery, only the mode and the two anchors are filled in.
 """
 
 from __future__ import annotations
@@ -32,6 +33,9 @@ from nb_common import code, lit, md  # noqa: E402
 SKILL = "ml-business-framing"
 STAGE = "business"
 
+MODE_SECTION = ("mode", "Project Mode", ["mode"],
+                'mode is "standard" (a clear business goal and KPI) or "exploratory" (an experiment, framed by what it '
+                'should teach and what each answer would lead to).')
 SECTIONS = [
     # (key in reasoning, heading, fields, what to check)
     ("goal", "Business Goal", ["business_goal", "business_kpi"],
@@ -49,6 +53,19 @@ SECTIONS = [
     ("constraints", "Constraints and Scope", ["constraints", "out_of_scope"],
      "Limits on latency, explanation, fairness, and data access, and what this model will not do."),
 ]
+# Exploratory projects have no current approach to beat. They are framed by what they should teach, and what each
+# possible answer would lead to, which also says when to stop.
+EXPLORATORY_SECTIONS = [
+    ("learning", "What We Want to Learn", ["learning_question", "answer_actions"],
+     "answer_actions is a list of {answer, action}. Every answer should lead to a different action; if they all lead "
+     "to the same one, the experiment cannot change anything."),
+    ("decision", "Who Uses the Result", ["users"],
+     "Who reads the answer and takes the action."),
+] + [s for s in SECTIONS if s[0] in ("outcome", "output_use", "ml_needed", "constraints")]
+
+
+def sections_for(mode):
+    return [MODE_SECTION] + (EXPLORATORY_SECTIONS if mode == "exploratory" else SECTIONS)
 
 
 def build(answers, spec, scripts_dir, nb_name):
@@ -59,15 +76,16 @@ def build(answers, spec, scripts_dir, nb_name):
     bus.pop("status", None)
     cells = nb_common.setup_cells(
         STAGE, "Business Framing",
-        "What decision the model would support, how it is made today, and what a useful result looks like. "
-        "Nothing here needs the data.\n\n"
+        "What decision the model would support, how it is made today, and what a useful result looks like, or, "
+        "for an exploratory project, what it should teach and what each answer would lead to. The mode and the two "
+        "anchors are settled before anyone looks at the data; the rest is drafted from what data discovery found.\n\n"
         "**How to use this notebook.** The code cells marked *Decision* hold the answers. Edit them, then choose "
         "Run All. The last cells check the answers, write them to `ml_spec.yaml`, and update the stakeholder "
         "summary `docs/business_framing.md`. The ML definition of the problem (target, window, metric) comes later, "
         "in `03_problem_framing.ipynb`.",
         scripts_dir, nb_name)
     cells.append(code("business = {}  # filled in by the decision cells below"))
-    for key, heading, fields, hint in SECTIONS:
+    for key, heading, fields, hint in sections_for(bus.get("mode")):
         text = f"## {heading}\n\n"
         if reasoning.get(key):
             text += reasoning[key].strip() + "\n\n"
@@ -98,6 +116,9 @@ def build(answers, spec, scripts_dir, nb_name):
 assert STATUS in ("draft", "confirmed"), "STATUS must be draft or confirmed"
 assert business.get("ml_needed") in (None, "yes", "no", "unsure"), 'ml_needed must be "yes", "no", or "unsure"'
 assert business.get("output_use") in (None, "ranked_list", "threshold_decision", "probability", "quantity", "other")
+assert business.get("mode") in (None, "standard", "exploratory"), 'mode must be "standard" or "exploratory"'
+for a in business.get("answer_actions") or []:
+    assert isinstance(a, dict) and a.get("answer") and a.get("action"), "each answer_actions item needs an answer and an action"
 
 result = nb_common.write_stage(SPEC_PATH, "business", {{**business, "risks": risks, "status": STATUS}}, "{SKILL}",
                                assumptions, open_questions, decisions)
@@ -111,7 +132,9 @@ import business_summary
 path = business_summary.write(SPEC_PATH, PATHS["docs"])
 print("Wrote", path)
 '''))
-    cells.append(md("## Next Step\n\nIf ML is needed, put the data in the raw data folder and run `/ml-data-discovery`. "
+    cells.append(md("## Next Step\n\nIf only the mode and the two anchors are filled in, put the data in the raw data "
+                    "folder, run `/ml-data-discovery`, and then come back to `/ml-business-framing` for the rest, drafted "
+                    "from the data. If the framing is complete and ML is needed, continue with `/ml-problem-framing`. "
                     "If the question is whether a change worked (an experiment or a campaign with a control group), "
                     "run `/ab-project-setup` and then `/ab-test-framing` instead. Check progress with `/ml-status`."))
     return nb_common.build(cells, spec, SKILL, STAGE)

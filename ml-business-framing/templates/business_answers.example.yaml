@@ -2,6 +2,7 @@
 # It builds notebooks/01_business_framing.ipynb. Use exactly these keys, and null for anything not known yet.
 status: confirmed
 business:
+  mode: standard   # standard or exploratory; see business_answers_exploratory.example.yaml
   business_goal: Reduce revenue lost to customers who stop ordering.
   business_kpi: Retained revenue from contacted customers
   decision_supported: The retention team sends an offer to the customers most likely to lapse each week.

@@ -25,12 +25,41 @@ def _v(x, empty="Not decided yet."):
     return str(x)
 
 
+def _render_exploratory(spec, pr, b, status, ml):
+    actions = [a for a in b.get("answer_actions") or [] if isinstance(a, dict)]
+    L = [f"# Business Framing: {pr.get('name')}", "",
+         f"**Status:** {status}  ", "**Mode:** Exploratory  ",
+         f"**Last updated:** {_dt.date.today():%Y-%m-%d}  ",
+         "**Source:** `notebooks/01_business_framing.ipynb`, written to `ml_spec.yaml`. Edit the notebook, not this file.", "",
+         "## Summary", "",
+         " ".join(x for x in [
+             f"This is an exploratory project. It should find out: {b['learning_question'].rstrip('.?')}?" if b.get("learning_question") else "",
+             f"It ends with one of {len(actions)} answers, each leading to a different action." if actions else "",
+             f"Is ML needed: {ml.lower()}." if b.get("ml_needed") else "",
+         ] if x), "",
+         "## What We Want to Learn", "", _v(b.get("learning_question")), "",
+         "## What Each Answer Leads To", ""]
+    if actions:
+        L += ["| Answer | Action |", "|---|---|"] + [f"| {a.get('answer')} | {a.get('action')} |" for a in actions]
+    else:
+        L += ["Not decided yet."]
+    L += ["", "## Who Uses the Result", "", _v(b.get("users")), "",
+          "## What to Predict", "", _v(b.get("outcome")) + " The exact target, time window, and metric are defined in the ML problem framing.", "",
+          "## How Success Is Judged", "",
+          _v(b.get("v1_bar_intent"), "Not decided yet.") + " There is no current approach to beat, so V1 is compared "
+          "with the best simple baseline.", ""]
+    return L
+
+
 def render(spec):
     pr = spec.get("project") or {}
     b = spec.get("business") or {}
     c = b.get("constraints") or {}
     status = (b.get("status") or "draft").capitalize()
     ml = {"yes": "Yes", "no": "No", "unsure": "Not sure yet"}.get(b.get("ml_needed"), "Not decided yet")
+    if ml_common.business_mode(b) == "exploratory":
+        L = _render_exploratory(spec, pr, b, status, ml)
+        return _render_common(spec, b, c, ml, L)
     L = [f"# Business Framing: {pr.get('name')}", "",
          f"**Status:** {status}  ",
          f"**Last updated:** {_dt.date.today():%Y-%m-%d}  ",
@@ -50,8 +79,13 @@ def render(spec):
          "| Item | Value |", "|---|---|",
          f"| Output use | {OUTPUT_USE.get(b.get('output_use'), _v(b.get('output_use')))} |",
          f"| What would make V1 worth using | {_v(b.get('v1_bar_intent'))} |", "",
-         "## Is ML Needed?", "", f"{ml}." + (f" {b['ml_needed_reason']}" if b.get("ml_needed_reason") else ""), "",
-         "## Constraints", ""]
+        ]
+    return _render_common(spec, b, c, ml, L)
+
+
+def _render_common(spec, b, c, ml, L):
+    L += ["## Is ML Needed?", "", f"{ml}." + (f" {b['ml_needed_reason']}" if b.get("ml_needed_reason") else ""), "",
+          "## Constraints", ""]
     cons = [f"* **{k.replace('_', ' ').capitalize()}:** {v}" for k, v in c.items() if k != "other" and v]
     cons += [f"* {x}" for x in c.get("other") or []]
     L += (cons or ["None recorded."]) + [""]

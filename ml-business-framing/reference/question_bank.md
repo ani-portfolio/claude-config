@@ -1,6 +1,43 @@
 # Business Framing Question Bank
 
-Each business framing field, why it matters, what a good answer looks like, and the red flags to check. None of these need the data. The ML definition (target column, unit of prediction, prediction time, exact metric) comes later, in ml-problem-framing.
+Each business framing field, why it matters, what a good answer looks like, and the red flags to check. The mode and the two anchors are asked before anyone looks at the data; the other fields are drafted from what data discovery found. The ML definition (target column, unit of prediction, prediction time, exact metric) comes later, in ml-problem-framing.
+
+## Mode (`mode`)
+
+**Ask:** Does this project have a clear business goal, or is it more of an exploratory experiment?
+
+**Why it matters:** It decides the two anchors and how V1 is judged. A standard project is measured against today's approach; an exploratory one has no current approach, so it is measured against the best simple baseline and ends with an action chosen in advance.
+
+**Good answer:** "Standard: we want to cut fraud losses, measured in basis points." Or "Exploratory: we want to know whether media spend explains sales at all before building anything."
+
+**Red flags:** "Exploratory" used to avoid naming a decision when there clearly is one. If someone already acts on the output each week, it is a standard project.
+
+## Learning question (`learning_question`), exploratory only
+
+**Ask:** What do you want to learn?
+
+**Why it matters:** It is the exploratory version of the business goal: it says what the project is for when there is no KPI yet.
+
+**Good answer:** "Can weekly media spend explain bike sales well enough to compare the channels?"
+
+**Red flags:**
+
+1. A question the data alone cannot answer, such as "what will happen if we double TV spend?" when spend never varied that much.
+2. A question about the model, such as "how accurate can we get?". Ask what the accuracy would be used for.
+
+## Answer actions (`answer_actions`), exploratory only
+
+**Ask:** What would you do with each possible answer?
+
+**Why it matters:** It gives the experiment a stopping rule and a reason to exist. ml-problem-framing ties the V1 bar to it.
+
+**Good answer:** "Yes: build the budget model and test a reallocation. No: stop and fix how spend is tracked."
+
+**Red flags:**
+
+1. Every answer leads to the same action, so the experiment cannot change anything.
+2. An answer has no action, such as "then we will know more".
+
 
 ## Business goal (`business_goal`, `business_kpi`)
 
@@ -65,7 +102,9 @@ Each business framing field, why it matters, what a good answer looks like, and 
 | `quantity` | A number such as demand or spend | MAE, WAPE, or RMSE |
 | `other` | Ranking of items for a user, segments, and so on | Decided in ml-problem-framing |
 
-**Good V1 bar intent:** stated against the current approach, for example "finds more of the customers who lapse than the 30 day rule, at the same 500 calls a week". ml-problem-framing turns it into a number once the baseline and the class balance are known.
+**Good V1 bar intent (exploratory):** "beats the best simple baseline by at least 10% on CV, then build the budget model". There is no current approach, so the bar is a margin over the best simple baseline, tied to an answer action.
+
+**Good V1 bar intent (standard):** stated against the current approach, for example "finds more of the customers who lapse than the 30 day rule, at the same 500 calls a week". ml-problem-framing turns it into a number once the baseline and the class balance are known.
 
 **Red flags:**
 
