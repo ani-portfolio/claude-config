@@ -1,0 +1,24 @@
+models: all
+slices:
+  categorical:
+  - store_id
+  numeric_bins: {}
+  time:
+    column: date
+    period: W
+  new_entity: store_id
+  missing: []
+  protected: []
+  min_rows: 100
+  min_positives: 30
+bootstrap:
+  n: 200
+  cluster: date
+  seed: 0
+reasoning: {}
+risks: []
+assumptions: []
+open_questions: []
+decisions: []
+resolved_questions: []
+

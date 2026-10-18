@@ -10,8 +10,11 @@ stages), it:
 3. checks the results: every stage exit code 0, one commit per stage on ml/v1 and nothing on main, runs tagged V1
    and current, the champion registered with the aliases champion and champion-v1, and the answers artifact and git
    commit on each stage run;
-4. with --iterate (the first fixture only, unless --iterate-all), opens V2, reruns training and evaluation, closes
-   it as kept, then opens V3 and rolls it back, and checks the branches, tags, aliases, and current runs.
+4. with --iterate (the first fixture only, unless --iterate-all), opens V2, carries the V1 champion forward, reruns
+   training and evaluation, closes it as kept, and checks that the iteration bar was applied; then opens V3 and rolls
+   it back, and checks the branches, tags, aliases, and current runs.
+5. for an exploratory fixture (business.mode exploratory), checks that the model card frames the result by the
+   learning question.
 
 The real MLflow server and ~/.mlflow are never touched: MLFLOW_TRACKING_URI points at a sqlite file in the
 temporary folder.
@@ -174,6 +177,12 @@ def check_v1(c, root, spec_path, env, results):
     currents = client.search_runs([exp_id], "tags.current = 'true' and tags.run_type = 'stage'")
     stages = [r.data.tags.get("stage") for r in currents]
     c.check(len(stages) == len(set(stages)), "one current run per stage", str(sorted(stages)))
+    spec = ml_common.load(spec_path)
+    if (spec.get("business") or {}).get("mode") == "exploratory":
+        card = os.path.join(root, "docs", "model_card.md")
+        text = open(card).read() if os.path.exists(card) else ""
+        c.check("An exploratory project" in text and "| Answer | Action |" in text,
+                "exploratory: the model card frames the result by the learning question")
     name = spec["tracking"].get("registered_model") or f"{spec['project']['name']}-champion"
     try:
         champ = client.get_model_version_by_alias(name, "champion")
@@ -205,9 +214,18 @@ def run_iteration(c, root, spec_path, env, results):
     entry = spec["iterations"]["entries"][-1]
     c.check(spec["version"]["current"] == "V2" and entry.get("version") == "V2", "V2: the spec says version V2")
     c.check(bool(entry.get("mlflow_parent_run")), "V2: MLflow parent run created")
+    c.check(bool((spec["iterations"].get("bar") or {}).get("min_folds")), "V2: the iteration bar is written to the spec")
+    # Carry the V1 champion forward, so the iteration bar compares it with the new champion on the same folds.
+    r = subprocess.run(it + ["carry-forward", "--json"], cwd=root, capture_output=True, text=True, env=env)
+    c.check(r.returncode == 0, "V2: champion carried forward", (r.stdout + r.stderr)[-400:])
+    training_v2 = os.path.join(kept, "training_v2.yaml")
+    tr_answers = ml_common.load(os.path.join(kept, "training.yaml"))
+    if r.returncode == 0:
+        tr_answers["models"] = list(tr_answers.get("models") or []) + [json.loads(r.stdout)["model"]]
+    ml_common.save(training_v2, tr_answers)
     for stage, skill, ans, extra in STAGES[3:]:
         flags = ["--rebuild", "--overwrite"] if stage == "training" else ["--overwrite"]
-        res = run_stage(root, env, skill, os.path.join(kept, ans), flags)
+        res = run_stage(root, env, skill, training_v2 if stage == "training" else os.path.join(kept, ans), flags)
         results[f"v2 {stage}"] = res
         c.check(res.get("exit_code") == 0, f"V2 {stage}: exit code 0",
                 f"{res.get('exit_reason')} {res.get('stderr_tail', '')[-400:]}")
@@ -221,6 +239,9 @@ def run_iteration(c, root, spec_path, env, results):
     r = subprocess.run(it + ["close", "--outcome", "kept", "--reason", "Regression test keeps V2.", "--json"],
                        cwd=root, capture_output=True, text=True, env=env)
     c.check(r.returncode == 0, "V2: closed as kept", (r.stdout + r.stderr)[-400:])
+    closed = ml_common.load(spec_path)["iterations"]["entries"][0]
+    c.check((closed.get("bar_result") or {}).get("status") in ("pass", "fail"),
+            "V2: the iteration bar was applied on the same folds", str(closed.get("bar_result")))
     c.check(git(root, "tag", "-l", "v2").stdout.strip() == "v2", "V2: v2 is tagged")
     v2 = client.get_model_version_by_alias(name, "champion-v2").version
     c.check(client.get_model_version_by_alias(name, "champion").version == v2, "V2 kept: alias champion moved to V2")
@@ -267,7 +288,8 @@ def main():
     try:
         import mlflow  # noqa: F401  the checks read the MLflow store
     except ImportError:
-        if os.path.realpath(sys.executable) != os.path.realpath(py):
+        # Compare the paths as given, not resolved: a venv's python links to the same interpreter as python3.
+        if os.path.abspath(sys.executable) != os.path.abspath(py):
             os.execv(py, [py, os.path.abspath(__file__), *sys.argv[1:]])
         sys.exit("The test Python has no mlflow.")
     names = args.fixtures or sorted(d for d in os.listdir(FIXTURES) if os.path.isdir(os.path.join(FIXTURES, d)))

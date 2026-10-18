@@ -1,0 +1,89 @@
+spec_version: 1
+project:
+  name: sales_exploratory
+  description: null
+  owner: null
+  python: null
+  created: '2026-10-09T11:02:39'
+  updated: '2026-10-16T14:43:56'
+paths:
+  data_raw: data/raw
+  data_processed: data/processed
+  notebooks: notebooks
+  src: src
+  models: models
+  docs: docs
+business:
+  status: confirmed
+  business_goal: null
+  business_kpi: null
+  decision_supported: null
+  users: null
+  capacity: null
+  current_approach: null
+  outcome: Weekly sales
+  output_use: quantity
+  v1_bar_intent: Beat the best simple baseline by at least 10% on CV, then build the
+    planning model.
+  ml_needed: 'yes'
+  ml_needed_reason: null
+  constraints:
+    latency: null
+    interpretability: null
+    fairness: null
+    data_access: null
+    other: []
+  out_of_scope: []
+  risks: []
+  mode: exploratory
+  learning_question: Can the weekly inputs explain sales well enough to plan with?
+  answer_actions:
+  - answer: Yes, the model beats the best simple baseline by 10%
+    action: Build the planning model
+  - answer: 'No'
+    action: Stop and improve the inputs first
+discovery: {}
+framing:
+  status: confirmed
+  task_type: forecasting
+  target:
+    name: sales
+    definition: null
+    positive_class: null
+    outcome_window: null
+    exists_in_data: true
+    construction: null
+    label_delay: null
+  unit_of_prediction: null
+  entity_id_cols:
+  - store_id
+  population: null
+  prediction_time:
+    description: null
+    column: date
+    feature_cutoff: null
+    cadence: null
+    horizon: 28 days
+  success:
+    primary_metric: null
+    secondary_metrics: []
+    v1_bar: null
+    guardrails: []
+    v1_criteria:
+    - id: beats_best_baseline
+      kind: pct_over_reference
+      pct: 10
+      'on': cv
+data:
+  sources: []
+  date_col: date
+  id_cols: []
+  excluded_cols: []
+eda:
+  mode: targeted
+  source: data/raw/sales.parquet
+assumptions: []
+open_questions: []
+decisions: []
+notebooks: {}
+history: []
