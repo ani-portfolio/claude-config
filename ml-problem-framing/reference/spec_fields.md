@@ -31,19 +31,20 @@ Each workflow step writes one numbered notebook, and the notebook is the record 
 | Step | Skill | Main output | Done when |
 |---|---|---|---|
 | 1. setup | ml-project-setup | Project folder, `.venv`, `00_scratch.ipynb` | `project.kernel` is set |
-| 2. business | ml-business-framing | `01_business_framing.ipynb`, and the summary `docs/business_framing.md` | `business.status` is `confirmed` |
+| 2. business (anchors only) | ml-business-framing | `01_business_framing.ipynb` with the mode and the two anchors, as a draft | `business.mode` is set and its two anchors are filled in (`business_goal` and `decision_supported`, or `learning_question` and `answer_actions`), or `business.status` is `confirmed` |
 | 3. discovery | ml-data-discovery | `02_data_discovery.ipynb`, and `docs/data_dictionary.yaml` | `discovery` is filled in (or the ML framing was confirmed directly) |
-| 4. framing | ml-problem-framing | `03_problem_framing.ipynb` | `framing.status` is `confirmed` |
-| 5. eda | ml-eda-report | `04_eda_<dataset>.ipynb` | `eda.mode` is `targeted` and the ML framing is confirmed |
-| 6. split | ml-train-test-split | `05_split.ipynb`, and `train.parquet`, `test.parquet`, `cv_folds.parquet` (and `gap.parquet`) in `data/processed` | `split` is filled in |
-| 7. features | ml-feature-engineering | `06_features.ipynb`, `src/features.py`, `src/custom_features.py`, and `features_train.parquet` and `features_test.parquet` in `data/processed` | `features` is filled in |
-| 8. baseline | ml-baseline-model | `07_baseline.ipynb`, and `baseline_cv_results.parquet` and `baseline_oof_predictions.parquet` in `data/processed` | `baseline` is filled in |
-| 9. training | ml-model-training | `08_training.ipynb`, `training_runs.parquet` and `training_oof_predictions.parquet` in `data/processed`, and `models/champion_<name>.joblib` | `training` is filled in |
-| 10. evaluation | ml-offline-evaluation | `09_evaluation.ipynb` | `evaluation` is filled in |
+| 4. business (full framing) | ml-business-framing | `01_business_framing.ipynb`, and the summary `docs/business_framing.md` | `business.status` is `confirmed` |
+| 5. framing | ml-problem-framing | `03_problem_framing.ipynb` | `framing.status` is `confirmed` |
+| 6. eda | ml-eda-report | `04_eda_<dataset>.ipynb` | `eda.mode` is `targeted` and the ML framing is confirmed |
+| 7. split | ml-train-test-split | `05_split.ipynb`, and `train.parquet`, `test.parquet`, `cv_folds.parquet` (and `gap.parquet`) in `data/processed` | `split` is filled in |
+| 8. features | ml-feature-engineering | `06_features.ipynb`, `src/features.py`, `src/custom_features.py`, and `features_train.parquet` and `features_test.parquet` in `data/processed` | `features` is filled in |
+| 9. baseline | ml-baseline-model | `07_baseline.ipynb`, and `baseline_cv_results.parquet` and `baseline_oof_predictions.parquet` in `data/processed` | `baseline` is filled in |
+| 10. training | ml-model-training | `08_training.ipynb`, `training_runs.parquet` and `training_oof_predictions.parquet` in `data/processed`, and `models/champion_<name>.joblib` | `training` is filled in |
+| 11. evaluation | ml-offline-evaluation | `09_evaluation.ipynb` | `evaluation` is filled in |
 
 Notebooks live in the `notebooks` folder. When a person has edited a notebook and a skill would replace it, the skill stops and offers to replace it or to write the next version, such as `03_problem_framing_v2.ipynb`.
 
-`ml_common.py status` and the ml-status skill print this progress and names the next step. `ml_common.py gate` exits with code 1 while steps 4 or 5 are not done, or when the business framing concluded that ML is not needed, and the modelling skills (split onwards) run it first.
+`ml_common.py status` and the ml-status skill print this progress and names the next step. `ml_common.py gate` exits with code 1 while the ML framing (step 5) or the targeted EDA (step 6) is not done, or when the business framing concluded that ML is not needed, and the modelling skills (split onwards) run it first.
 
 ## Top level
 
@@ -72,11 +73,14 @@ Folders relative to the project root. Skills read these instead of assuming a la
 
 ## business
 
-Written by ml-business-framing. Nothing here needs the data.
+Written by ml-business-framing, in two steps: the mode and the two anchors before anyone looks at the data, then the rest of the framing, drafted from what data discovery found.
 
 | Field | Meaning |
 |---|---|
 | `status` | `not_started`, `draft`, or `confirmed`. Only ml-business-framing sets `confirmed`, after the user agrees. |
+| `mode` | `standard` (a clear business goal and KPI) or `exploratory` (an experiment). Empty counts as `standard`, so specs from before modes existed read as standard. |
+| `learning_question` | Exploratory only. What the project should find out, for example "can weekly media spend explain bike sales well enough to compare channels?". One of the two exploratory anchors. |
+| `answer_actions` | Exploratory only. What would be done with each possible answer, as a list of `answer` and `action`, for example "yes: build the budget model" and "no: improve how spend is tracked". The second exploratory anchor; it gives the project a stopping rule. |
 | `business_goal` | The business outcome to improve. |
 | `business_kpi` | The business measure the model should move. |
 | `decision_supported` | The action the output drives and who takes it. |
@@ -332,8 +336,19 @@ Each entry:
 | `version`, `previous_version` | The version this iteration builds (iteration N builds V(N+1)) and the version it started from. |
 | `mlflow_parent_run` | The MLflow run of the version (`run_type = experiment`). Every stage run of the iteration is logged as its child. |
 | `end` | The state it ended with: `champion`, `cv`, `test`, `test_look`, `data_version`, and `carried_forward_cv` (the carried champion's CV score on the new folds, when it was trained). |
+| `bar_result` | The iteration bar applied when it closed (`ml_common.iteration_bar_evaluate`): `status` (`pass`, `fail`, or `incomplete`), `wins`, `folds`, `mean_diff`, `spread`, and `detail`. |
 
 Opening and closing an iteration also add an entry to `decisions` with stage `iteration`.
+
+`bar` (at the top of the section) is the iteration bar: when a new champion really beats the champion carried forward, judged on the same CV folds. It is written from `ml_common.ITERATION_BAR_DEFAULTS` when the first iteration opens, and can be edited.
+
+| Field | Default | Meaning |
+|---|---|---|
+| `min_fold_win_share` | 0.5 | The new champion must win on more than this share of the paired folds. |
+| `spread_multiple` | 1.0 | Its mean improvement must be larger than this many standard deviations of the per fold differences. |
+| `min_folds` | 3 | With fewer paired folds, the bar is `incomplete`, never `fail`. |
+| `max_iterations` | 3 | Iterating without a person stops after this many iterations. Recorded for the agent that drives the workflow; not enforced by ml-iterate. |
+| `max_consecutive_fails` | 2 | Iterating without a person stops after this many iterations in a row that fail the bar. Also for that agent. |
 
 ## version
 

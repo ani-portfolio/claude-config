@@ -78,9 +78,24 @@ STAGE_NUMBER["review"] = 10
 NOTEBOOK_BASE["review"] = "review"
 STAGE_SKILL["review"] = "ml-review"
 
-# The steps a project goes through, in order: one step per stage. Kept separate from WORKFLOW so a stage can
-# later run in more than one step.
-STEPS = [(stage, skill, "", what) for stage, skill, _, what in WORKFLOW]
+# The steps a project goes through, in order. Kept separate from WORKFLOW so a stage can run in more than one step:
+# the business stage runs twice, first for the mode and the two anchors (before the data), then for the full
+# framing, drafted from what data discovery found.
+STEPS = []
+for _stage, _skill, _, _what in WORKFLOW:
+    if _stage == "business":
+        STEPS.append(("business_anchors", _skill, "anchors only",
+                      "project mode and the two anchors that come before the data"))
+        _business_step = ("business", _skill, "full framing",
+                          "the rest of the business framing, drafted from the data: outcome, current approach, "
+                          "output use, V1 bar, constraints")
+        continue
+    STEPS.append((_stage, _skill, "", _what))
+    if _stage == "discovery":
+        STEPS.append(_business_step)
+del _stage, _skill, _what, _business_step
+# Each step's stage: the section and notebook it works on.
+STEP_STAGE = {s[0]: ("business" if s[0] == "business_anchors" else s[0]) for s in STEPS}
 EDA_MODES = ("discovery", "targeted")
 
 # Folders relative to the project root. Stored in the spec under paths, so a project can override them.
@@ -99,6 +114,12 @@ PREV_FRAMING_TODO = "The ML problem has not been framed yet. Run the ml-framing 
 OLD_FRAMING_TODO = "The problem has not been framed yet. Run the problem-framing skill before building features."
 OLD_BUSINESS_TODO = "The business problem has not been framed yet. Run the business-framing skill."
 BUSINESS_STATUS = {"not_started", "draft", "confirmed"}
+# standard: a clear business goal and KPI. exploratory: an experiment, framed by what it should teach and what each
+# answer would lead to. A spec without a mode is standard.
+BUSINESS_MODES = {"standard", "exploratory"}
+# The two anchors asked before anyone looks at the data, by mode.
+BUSINESS_ANCHORS = {"standard": ["business_goal", "decision_supported"],
+                    "exploratory": ["learning_question", "answer_actions"]}
 ML_NEEDED = {"yes", "no", "unsure"}
 TASK_TYPES = {"binary_classification", "multiclass_classification", "regression", "ranking", "forecasting", "other"}
 FRAMING_STATUS = {"not_started", "draft", "confirmed"}
@@ -227,6 +248,9 @@ def template(name=None, description=None):
         "paths": dict(DEFAULT_PATHS),
         "business": {
             "status": "not_started",  # not_started, draft, confirmed
+            "mode": None,  # standard or exploratory; empty means standard
+            "learning_question": None,  # exploratory: what the project should find out
+            "answer_actions": [],  # exploratory: each {answer, action}, what would be done with each answer
             "business_goal": None,
             "business_kpi": None,
             "decision_supported": None,
@@ -302,6 +326,33 @@ def template(name=None, description=None):
 
 REQUIRED_BUSINESS = ["business_goal", "decision_supported", "outcome"]
 RECOMMENDED_BUSINESS = ["business_kpi", "users", "current_approach", "output_use", "v1_bar_intent", "ml_needed"]
+REQUIRED_BUSINESS_EXPLORATORY = ["learning_question", "answer_actions", "outcome"]
+RECOMMENDED_BUSINESS_EXPLORATORY = ["output_use", "v1_bar_intent", "ml_needed"]
+
+
+def business_mode(spec_or_business):
+    """standard or exploratory. Accepts the spec or its business section; an empty mode is standard."""
+    d = spec_or_business or {}
+    bus = d.get("business") if isinstance(d.get("business"), dict) else d
+    return "exploratory" if (bus or {}).get("mode") == "exploratory" else "standard"
+
+
+def business_fields(spec_or_business):
+    """(required, recommended) business fields for the project's mode."""
+    if business_mode(spec_or_business) == "exploratory":
+        return REQUIRED_BUSINESS_EXPLORATORY, RECOMMENDED_BUSINESS_EXPLORATORY
+    return REQUIRED_BUSINESS, RECOMMENDED_BUSINESS
+
+
+def anchors_done(spec):
+    """True when the mode is set and both anchors for it are filled, or the business framing is confirmed (projects
+    from before the anchors step are not sent back)."""
+    bus = (spec or {}).get("business") or {}
+    if bus.get("status") == "confirmed":
+        return True
+    if bus.get("mode") not in BUSINESS_MODES:
+        return False
+    return all(not _empty(bus.get(k)) for k in BUSINESS_ANCHORS[bus["mode"]])
 REQUIRED_FRAMING = [
     "task_type",
     "target.definition",
@@ -611,13 +662,22 @@ def validate(spec):
         errors.append(f"business.status is {bst!r}. Use one of: {', '.join(sorted(BUSINESS_STATUS))}.")
     if bus.get("ml_needed") is not None and bus.get("ml_needed") not in ML_NEEDED:
         errors.append(f"business.ml_needed is {bus.get('ml_needed')!r}. Use one of: {', '.join(sorted(ML_NEEDED))}.")
+    if bus.get("mode") is not None and bus.get("mode") not in BUSINESS_MODES:
+        errors.append(f"business.mode is {bus.get('mode')!r}. Use one of: {', '.join(sorted(BUSINESS_MODES))}.")
+    aa = bus.get("answer_actions")
+    if aa is not None and not isinstance(aa, list):
+        errors.append("business.answer_actions must be a list.")
+    for i, a in enumerate(aa if isinstance(aa, list) else []):
+        if not (isinstance(a, dict) and a.get("answer") and a.get("action")):
+            errors.append(f"business.answer_actions[{i}] needs an answer and an action.")
     errors += [f"framing.success.v1_criteria: {p}" for p in v1_problems(((fr.get("success") or {}).get("v1_criteria")))]
     leftovers = [k for k in _MOVED_TO_BUSINESS if k in fr]
     if leftovers:
         errors.append("framing still holds business fields (" + ", ".join(leftovers) + "). They belong in business. "
                       "Any write through ml_common.py moves them.")
-    bus_req = [f"business.{k}" for k in REQUIRED_BUSINESS if _empty(_get(bus, k))]
-    bus_rec = [f"business.{k}" for k in RECOMMENDED_BUSINESS if _empty(_get(bus, k))]
+    req_fields, rec_fields = business_fields(bus)
+    bus_req = [f"business.{k}" for k in req_fields if _empty(_get(bus, k))]
+    bus_rec = [f"business.{k}" for k in rec_fields if _empty(_get(bus, k))]
     fr_req = [f"framing.{k}" for k in REQUIRED_FRAMING if _empty(_get(fr, k))]
     fr_rec = [f"framing.{k}" for k in RECOMMENDED_FRAMING if _empty(_get(fr, k))]
     if bst == "confirmed" and bus_req:
@@ -641,6 +701,8 @@ def step_done(spec, step):
     fr_status = ((spec.get("framing") or {}).get("status")) or "not_started"
     if step == "setup":
         return bool((spec.get("project") or {}).get("kernel"))
+    if step == "business_anchors":
+        return anchors_done(spec)
     if step == "business":
         return bus_status == "confirmed"
     if step == "discovery":
@@ -870,6 +932,57 @@ def v1_summary(result):
     return f"{result['status']} on {result['on']} (" + "; ".join(parts) + ")"
 
 
+# ---------------------------------------------------------------- the iteration bar
+
+# iterations.bar: when a new champion (V2, V3, ...) really beats the champion carried forward from the version
+# before, judged on the same CV folds. min_fold_win_share: the new champion must win on more than this share of
+# the folds. spread_multiple: its mean improvement must be larger than this many standard deviations of the per
+# fold differences. min_folds: fewer paired folds than this cannot be judged. max_iterations and
+# max_consecutive_fails are the limits for iterating without a person; they are recorded here for the agent that
+# drives the workflow.
+ITERATION_BAR_DEFAULTS = {"min_fold_win_share": 0.5, "spread_multiple": 1.0, "min_folds": 3,
+                          "max_iterations": 3, "max_consecutive_fails": 2}
+
+
+def iteration_bar(spec):
+    """The project's iteration bar, with the defaults for anything not set."""
+    return {**ITERATION_BAR_DEFAULTS, **(((spec or {}).get("iterations") or {}).get("bar") or {})}
+
+
+def iteration_bar_evaluate(new_folds, old_folds, lower_is_better, bar=None):
+    """Apply the iteration bar to per fold CV scores of the new champion and the carried old one, in fold order.
+    Returns {"status": pass, fail, or incomplete, "wins", "folds", "mean_diff", "spread", "detail"}. mean_diff is
+    the mean improvement (positive is better, whatever the metric's direction). It is never fail because of missing
+    information."""
+    bar = {**ITERATION_BAR_DEFAULTS, **(bar or {})}
+    new, old = list(new_folds or []), list(old_folds or [])
+    out = {"status": "incomplete", "wins": None, "folds": min(len(new), len(old)), "mean_diff": None,
+           "spread": None, "detail": ""}
+    if not new or not old:
+        out["detail"] = "Per fold scores are missing for " + ("the new champion" if not new else "the carried model") + "."
+        return out
+    if len(new) != len(old):
+        out["detail"] = f"The two models were scored on different folds ({len(new)} against {len(old)})."
+        return out
+    diffs = [(o - n) if lower_is_better else (n - o) for n, o in zip(new, old)]
+    k = len(diffs)
+    mean = sum(diffs) / k
+    spread = (sum((d - mean) ** 2 for d in diffs) / (k - 1)) ** 0.5 if k > 1 else 0.0
+    wins = sum(1 for d in diffs if d > 0)
+    out.update(wins=wins, mean_diff=mean, spread=spread)
+    if k < int(bar["min_folds"]):
+        out["detail"] = f"Only {k} paired folds; the bar needs at least {int(bar['min_folds'])}."
+        return out
+    win_ok = wins / k > float(bar["min_fold_win_share"])
+    spread_ok = mean > float(bar["spread_multiple"]) * spread
+    out["status"] = "pass" if (win_ok and spread_ok) else "fail"
+    reasons = [f"wins on {wins} of {k} folds" + ("" if win_ok else f", needs more than {float(bar['min_fold_win_share']):.0%}"),
+               f"mean improvement {mean:.4g} against a spread of {spread:.4g}"
+               + ("" if spread_ok else f", needs more than {float(bar['spread_multiple']):g} times the spread")]
+    out["detail"] = "The new champion " + "; ".join(reasons) + "."
+    return out
+
+
 # Words in a V1 bar or a decision that name a kind of model.
 MODEL_WORDS = {
     "logistic": ("logistic",), "linear regression": ("ridge", "linear"), "ridge": ("ridge",), "lasso": ("lasso",),
@@ -969,6 +1082,16 @@ def consistency_checks(spec):
         add("ML needed", "The business framing concluded ML is not needed, but modelling stages have run.",
             "business.ml_needed")
 
+    # Iterations kept although the new champion did not pass the iteration bar
+    for e in ((spec.get("iterations") or {}).get("entries") or []):
+        if isinstance(e, dict) and e.get("outcome") == "kept" and (e.get("bar_result") or {}).get("status") == "fail":
+            why = [d for d in spec.get("decisions") or [] if isinstance(d, dict)
+                   and f"iteration {e.get('id')}" in str(d.get("decision") or "").lower()
+                   and "bar" in str(d.get("decision") or "").lower()]
+            if not why:
+                add("iteration bar", f"Iteration {e.get('id')} was kept, but its new champion failed the iteration bar "
+                    "and no decision says why it was kept anyway.", f"iterations.entries.{e.get('id')}")
+
     # Open questions for stages that are finished
     order = [s[0] for s in STEPS]
     nxt = next_step(spec)[0]
@@ -1030,6 +1153,8 @@ def _print_status(spec, path):
         label = "done" if step_done(spec, step) else "not started"
         if step == "discovery" and label == "done" and not spec.get("discovery"):
             label = "skipped"
+        elif step == "business_anchors" and label == "not started" and (spec.get("business") or {}).get("mode"):
+            label = "draft"
         elif step in ("business", "framing") and label == "not started" and \
                 ((spec.get(step) or {}).get("status")) == "draft":
             label = "draft"

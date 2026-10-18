@@ -136,6 +136,11 @@ def stale_results(spec, root):
     if fr_status == "confirmed" and disc_t and fr_t and disc_t > fr_t:
         notes.append(("framing", "Data discovery ran again after the ML framing was last updated. Check that the "
                                  "framing still fits the data, with ml-problem-framing."))
+    # Only for projects framed in the current order (they record a mode); before it, discovery always came later.
+    bus = spec.get("business") or {}
+    if bus.get("mode") and bus.get("status") == "confirmed" and disc_t and bus_t and disc_t > bus_t:
+        notes.append(("business", "Data discovery ran again after the business framing was confirmed. Check that "
+                                  "the drafts it was based on still hold, with ml-business-framing."))
     if fr_status == "confirmed" and bus_t and fr_t and bus_t > fr_t:
         notes.append(("framing", "The business framing changed after the ML framing was last updated. Check that "
                                  "the ML framing still matches it, with ml-problem-framing."))
@@ -198,12 +203,14 @@ def collect(spec, path):
         state = "done" if done else "not started"
         if step == "discovery" and done and not spec.get("discovery"):
             state = "skipped"
+        elif step == "business_anchors" and not done and (spec.get("business") or {}).get("mode"):
+            state = "draft"
         elif step in ("business", "framing") and not done and ((spec.get(step) or {}).get("status")) == "draft":
             state = "draft"
         missing = []
         if state == "done":
             missing = [label for label, p in outputs.get(step, []) if not os.path.exists(p)]
-        steps.append({"number": i, "step": step, "skill": skill, "what": what, "state": state,
+        steps.append({"number": i, "step": step, "skill": skill, "how": how, "what": what, "state": state,
                       "missing_outputs": missing, "installed": skill in installed})
 
     nxt_idx = order.index(next_step) if next_step in order else len(order)
@@ -225,6 +232,7 @@ def collect(spec, path):
         "steps": steps,
         "next": {"step": next_step, "skill": next_skill},
         "ml_needed": business.get("ml_needed"),
+        "mode": ml_common.business_mode(spec) if business.get("mode") else None,
         "stale": [{"step": s, "note": n} for s, n in stale_results(spec, root)],
         "blocking_questions": blocking,
         "later_questions": later,
@@ -341,7 +349,7 @@ def print_table(r, explain=False):
     print("| " + " | ".join(cols) + " |")
     print("|" + "---|" * len(cols))
     for s in r["steps"]:
-        cells = [str(s["number"]), f"`/{s['skill']}`", status_word(r, s)]
+        cells = [str(s["number"]), f"`/{s['skill']}`" + (f" ({s['how']})" if s.get("how") else ""), status_word(r, s)]
         if explain:
             cells.append(s["what"][0].upper() + s["what"][1:])
         cells.append(row_notes(r, s).replace("|", "\\|"))
@@ -485,11 +493,14 @@ def print_optional(r):
 def print_text(r):
     print(f"Project: {r['project']}" + (f": {r['description']}" if r["description"] else ""))
     print(f"Spec: {r['spec']}")
+    if r.get("mode"):
+        print(f"Mode: {r['mode']}")
     print(f"Project Python: {r['python'] or 'none (.venv missing, run ml-project-setup)'}")
     print()
     print("Steps:")
     for s in r["steps"]:
-        line = f"  {s['number']:2}. {s['skill']:22} {s['state']:12} {s['what']}"
+        name = s["skill"] + (f" ({s['how']})" if s.get("how") else "")
+        line = f"  {s['number']:2}. {name:36} {s['state']:12} {s['what']}"
         print(line)
         if s["missing_outputs"]:
             print(f"      missing: {', '.join(s['missing_outputs'])}")

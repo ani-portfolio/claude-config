@@ -43,7 +43,7 @@ import ml_common  # noqa: E402
 import nb_common  # noqa: E402
 
 SKILL = "ml-reconcile-notes"
-ORDER = [s[0] for s in ml_common.STEPS]
+ORDER = list(ml_common.STAGES)  # stages, not steps: each stage has one notebook
 # Which stage, and so which notebook, owns each spec section.
 OWNER = {"project": "setup", "paths": "setup", "business": "business", "discovery": "discovery",
          "framing": "framing", "data": "framing", "eda": "eda", "split": "split", "features": "features",
