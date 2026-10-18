@@ -49,14 +49,14 @@ It prints the task, the current approach, the primary metric read from the frami
 
 ## Step 3: Ask which baselines to build
 
-**Round 1 (AskUserQuestion, up to two questions).**
+Ask one question at a time, one AskUserQuestion call per question, and wait for each answer before asking the next.
 
 1. **Baselines** (`multiSelect: true`). Question: "Which non ML baselines should I build?" Use the options `--suggest` printed for this task, with their descriptions, recommended ones first and marked (Recommended). AskUserQuestion allows at most four options, so leave out the least useful ones.
    * Classification and regression: the current business rule, the base rate or mean, the best single feature, a segment average.
    * Forecasting: naive (the value one horizon ago), seasonal naive, moving average, the series mean.
 2. **Primary metric,** only when the framing has none or `--suggest` warned about it: the proposed metric first (Recommended), with the alternatives for the task. For "at k" metrics, offer `k_share` when k is not smaller than the rows per group.
 
-**Round 2 (plain text, only when the current business rule was chosen).** Write `business.current_approach` as a pandas expression on the column names, for example `days_since_last_order > 30`, and ask the user to confirm it. Use only columns from the feature table or the split's training rows. If the rule uses something that is not in the data, say so and leave the rule out, with an open question.
+**Then, in plain text and only when the current business rule was chosen:** Write `business.current_approach` as a pandas expression on the column names, for example `days_since_last_order > 30`, and ask the user to confirm it. Use only columns from the feature table or the split's training rows. If the rule uses something that is not in the data, say so and leave the rule out, with an open question.
 
 If AskUserQuestion is unavailable or the user is not present, build the recommended baselines, write the rule from the current approach as an assumption, and say so at the top of the reply.
 

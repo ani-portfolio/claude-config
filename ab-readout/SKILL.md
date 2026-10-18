@@ -31,7 +31,7 @@ Propose a recommendation from the ship rule and the result:
 * **iterate:** the direction is promising but the result is inconclusive or not meaningful, and a changed treatment is worth testing.
 * **rerun:** the data cannot be trusted (a validation failure that was overridden) or the test was too small to detect the minimum effect.
 
-Ask with one AskUserQuestion round: the recommendation (your draft first, marked Recommended), the scale for the business impact (for example per 100,000 users, or the campaign's real volume), and whether the readout is `draft` or `final`. Propose `risks` and `next_steps` from the caveats above, and let the user correct them.
+Ask one question at a time, one AskUserQuestion call per question, waiting for each answer: first the recommendation (your draft first, marked Recommended), then the scale for the business impact (for example per 100,000 users, or the campaign's real volume), then whether the readout is `draft` or `final`. Propose `risks` and `next_steps` from the caveats above, and let the user correct them.
 
 If AskUserQuestion is unavailable, write the readout as `draft` with your proposed recommendation, and say so at the top of the reply.
 

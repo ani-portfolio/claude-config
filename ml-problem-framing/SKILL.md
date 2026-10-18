@@ -14,7 +14,7 @@ This is step 4 of the ML project skills: ml-project-setup, ml-business-framing, 
 
 1. **Never invent answers.** Propose answers from the business section, the discovery hints, and the data dictionary, and let the user confirm them. Anything still unconfirmed goes in `assumptions` or `open_questions`, never silently into the framing.
 2. **Push back.** When a choice is leaky, vague, or does not fit the data or the decision, say so plainly, explain why in one or two sentences, and suggest a fix. Do not accept "churned" as a target definition without a rule and a window.
-3. **Keep the interview short.** At most three rounds of questions. Lead with proposals, so the user can confirm instead of typing.
+3. **One question at a time.** Ask exactly one question per message, then wait for the answer before asking the next. Never send a numbered list of questions, and never put more than one question in an AskUserQuestion call. Lead with proposals, so the user can confirm instead of typing. Keep the interview short by skipping anything the spec, the dictionary, or an earlier answer already settles.
 4. **No raw data in the reply.** Use column names and the summary numbers in the spec, the dictionary, and the notebook checks. Do not print rows or values.
 5. **Use the scripts.** `scripts/make_notebook.py` builds and runs the notebook, and the notebook writes the spec. Do not edit the `framing` section or `data.excluded_cols` by hand.
 6. **Writing style.** Use simple language and full sentences. Use plain headings. Do not use dashes as punctuation.
@@ -38,9 +38,7 @@ If `notebooks/03_problem_framing.ipynb` exists, read its decision cells too. The
 
 ## Step 2: Propose what is predicted, and when
 
-Ask with AskUserQuestion. Put the best proposal first and mark it (Recommended), and say in each option's description which finding supports it.
-
-**Round A.**
+Ask with AskUserQuestion, one question per call, in the order below, and wait for each answer before asking the next. Put the best proposal first and mark it (Recommended), and say in each option's description which finding supports it. If an answer is leaky or vague, push back with one follow up question before moving on, and adjust the later proposals to fit the answers so far.
 
 1. **Target:** the candidate targets from `discovery.framing_hints` and the dictionary (`candidate_targets`) that fit `business.outcome`, each with its type and, for binary ones, the smaller class share. Always include "Build it from other columns", for targets such as "no order in the next 60 days". If chosen, ask in plain text how it is built, and record it in `target.construction` with `exists_in_data: false`. Point out when the build needs a join, and what `discovery.joins` says about that join.
 2. **Unit of prediction:** built from the main source's grain and entity IDs, for example "one `customer_id` per `scoring_date`". If an entity ID has more than one row per value, say so, because the split will have to be grouped or time based.
@@ -49,13 +47,13 @@ Ask with AskUserQuestion. Put the best proposal first and mark it (Recommended),
 
 ## Step 3: Propose how success is measured, and what to exclude
 
-**Round B.**
+Keep asking one question per call, in the same way as Step 2.
 
-1. **Task type and primary metric:** follow `business.output_use` and the metric guide in `reference/question_bank.md`, checked against the class balance. For a smaller class share under 5%, recommend PR AUC or recall at k, and push back on accuracy. Use `business.capacity` for k when the output is a ranked list.
-2. **V1 bar:** turn `business.v1_bar_intent` into a number against the current approach or a simple baseline. Then write the same bar as `success.v1_criteria`, the checks a script applies, so model training and evaluation (and later an agent) judge it without reading text. Propose each criterion from the text and confirm them in the same question: a comparison with a named model or baseline (`beats_model`), a share over the reference (`pct_over_reference`), a metric threshold (`threshold`), a project guardrail as a function in `src/v1_checks.py` (`check`), or something only a person can judge (`manual`). Each says whether it is judged on CV or on the test set (`on`). Prefer machine checkable criteria; a bar with a `manual` criterion always needs a person. When a `check` criterion is used, the script creates `src/v1_checks.py` from the template; write the functions there and show the user the code.
-3. **Columns to exclude** (`multiSelect: true`): every dictionary column with `timing` of `possibly_after_outcome` (other than the target), identifiers, personal data, and free text, each with its reason. Columns with `timing: unknown` are listed too, with the recommendation to exclude them until their timing is known.
+5. **Task type and primary metric:** follow `business.output_use` and the metric guide in `reference/question_bank.md`, checked against the class balance. For a smaller class share under 5%, recommend PR AUC or recall at k, and push back on accuracy. Use `business.capacity` for k when the output is a ranked list.
+6. **V1 bar:** turn `business.v1_bar_intent` into a number against the current approach or a simple baseline. Then write the same bar as `success.v1_criteria`, the checks a script applies, so model training and evaluation (and later an agent) judge it without reading text. Propose each criterion from the text and confirm them in the same question: a comparison with a named model or baseline (`beats_model`), a share over the reference (`pct_over_reference`), a metric threshold (`threshold`), a project guardrail as a function in `src/v1_checks.py` (`check`), or something only a person can judge (`manual`). Each says whether it is judged on CV or on the test set (`on`). Prefer machine checkable criteria; a bar with a `manual` criterion always needs a person. When a `check` criterion is used, the script creates `src/v1_checks.py` from the template; write the functions there and show the user the code.
+7. **Columns to exclude** (`multiSelect: true`): every dictionary column with `timing` of `possibly_after_outcome` (other than the target), identifiers, personal data, and free text, each with its reason. Columns with `timing: unknown` are listed too, with the recommendation to exclude them until their timing is known.
 
-**Round C (only if needed):** population, label delay, feature cutoff, and cadence, when the business framing and the data do not already answer them.
+**Follow ups (only if needed, still one at a time):** population, label delay, feature cutoff, and cadence, when the business framing and the data do not already answer them.
 
 ## Step 4: Build a draft notebook and check it against the data
 
@@ -83,7 +81,7 @@ Then check the full framing against those results and the red flags in `referenc
 6. A column with `before_prediction` timing uses a window that may end after the prediction time.
 7. The population in the data differs from the population scored in production.
 
-Tell the user about each problem found, with a suggested fix, and ask how to resolve them in one AskUserQuestion call if there are several. Record each one under `risks` with its `resolution`. A problem that cannot be resolved now goes in `open_questions` with the stage that needs it.
+Tell the user about each problem found, with a suggested fix, and ask how to resolve them one problem at a time, one AskUserQuestion call each. Record each one under `risks` with its `resolution`. A problem that cannot be resolved now goes in `open_questions` with the stage that needs it.
 
 Then show a compact summary: one short paragraph, and a small table with the target definition, unit of prediction, prediction time, outcome window, task type, primary metric, V1 bar, and the number of excluded columns. Ask: "Does this ML framing look right?" with the options "Confirm it" (Recommended), "Change something", and "Keep it as a draft".
 

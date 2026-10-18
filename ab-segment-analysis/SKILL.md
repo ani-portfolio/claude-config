@@ -31,7 +31,7 @@ PY ${CLAUDE_SKILL_DIR}/scripts/make_notebook.py --skip --reason "<why>"
 
 ## Step 2: Choose the segments
 
-Ask with one AskUserQuestion round (multiSelect): "Which segments should I check?" Offer only the columns in `data.pre_treatment_cols`, the planned ones first. If the user asks for a column recorded after assignment, explain the bias in one or two sentences and ask whether to drop it or keep it as descriptive only. Also ask for the metric when it is not the primary.
+Ask one question at a time, one AskUserQuestion call per question. First (multiSelect): "Which segments should I check?" Offer only the columns in `data.pre_treatment_cols`, the planned ones first. If the user asks for a column recorded after assignment, explain the bias in one or two sentences and ask whether to drop it or keep it as descriptive only. Then, as a separate question, ask for the metric when it is not the primary.
 
 If AskUserQuestion is unavailable, use only the segments named in the framing; if there are none, skip the step with that reason, and say so at the top of the reply.
 

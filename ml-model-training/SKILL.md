@@ -48,18 +48,18 @@ It prints the task, the training size, the positive share, the metric, the refer
 
 ## Step 3: Ask about the models
 
-**Round 1 (AskUserQuestion).**
+Ask one question at a time, one AskUserQuestion call per question, and wait for each answer before asking the next.
 
 1. **How many models?** Question: "How many ML models do you want to build in this run?" Options: "1", "2 (Recommended)", "3", "4". In a later run, mention the models already in the notebook, which are kept.
 
-**Round 2 (AskUserQuestion), one question per model, in the same call.** Question: "Which type is model N?" Options from the menu in `reference/models.md`, at most four per question, chosen for the task:
+**Model type, one question per model, one call each.** Question: "Which type is model N?" Options from the menu in `reference/models.md`, at most four per question, chosen for the task:
 
 * Classification: logistic regression, LightGBM (or scikit-learn gradient boosting when LightGBM is not installed), XGBoost or CatBoost, random forest.
 * Regression and forecasting: ridge regression, LightGBM, XGBoost or CatBoost, random forest.
 
 Recommend the linear model for model 1 when the notebook has no linear model yet, and LightGBM for model 2. Say in the description when a package is not installed. The user can type another type (decision tree, hist_gbm). If a chosen package is missing, ask before running `uv add <package>`.
 
-**Round 3 (AskUserQuestion), the questions that matter for each model.** Ask only what applies, up to four questions per call, more calls if needed:
+**The questions that matter for each model.** Ask only what applies, one question per call, going through one model at a time:
 
 * **Tuning** (every model): "How much tuning for model N?" Options: "Quick: 20 trials, about X minutes (Recommended)", "Thorough: 60 trials, about Y minutes", "None: the default settings only". Use the time per trial from `--suggest`.
 * **Class weights** (classification, positive share under about 10%): "Weight the rare class for model N?" Options: "No (Recommended)" when the metric ranks or the output is a probability; "Yes, balanced" when the output drives a yes or no decision at a threshold.

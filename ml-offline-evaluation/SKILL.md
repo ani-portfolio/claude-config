@@ -49,7 +49,7 @@ If the test set was opened before, ask with AskUserQuestion before going on: "Th
 
 ## Step 3: Ask
 
-One AskUserQuestion call with up to three questions:
+Ask one question at a time, one AskUserQuestion call per question, and wait for each answer before asking the next:
 
 1. **Models.** "Which models should be scored on the test set?" Options: "All: the champion, the other ML models, and the baselines (Recommended)", and "The champion and the baselines only". Name the champion in the question.
 2. **Slices.** "Which slices should the metrics be split by?" Use `multiSelect: true`, with one option per proposed slice dimension (at most four; group the numeric bins as one option). Say in the description that slices smaller than 100 rows or 30 positives are shown but marked too small, and that the user can type other columns.

@@ -50,7 +50,7 @@ If it exits with code 1, tell the user which step to run first (ml-problem-frami
 
 ## Step 2: Ask the setup questions
 
-Ask with at most three AskUserQuestion rounds of up to four questions each. Take every answer the spec already gives, and do not ask about it again. Put the best option first and mark it (Recommended).
+Ask one question at a time, one per message or AskUserQuestion call, and wait for each answer before asking the next. Take every answer the spec already gives, and do not ask about it again. Put the best option first and mark it (Recommended).
 
 1. <Question>: <how to build the options from the spec>.
 

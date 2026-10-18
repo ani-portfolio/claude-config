@@ -31,7 +31,7 @@ PY ${CLAUDE_SKILL_DIR}/scripts/make_notebook.py --skip --reason "<why>"
 
 ## Step 2: Ask the design questions
 
-One or two AskUserQuestion rounds, best guess first and marked (Recommended), skipping what the spec answers:
+Ask one question at a time, one AskUserQuestion call per question, and wait for each answer before asking the next. Best guess first and marked (Recommended), skipping what the spec answers:
 
 1. **Baseline:** the control rate or mean before the test, and its source. For continuous metrics, also the standard deviation. Offer "Use the control mean from the test data" for a finished test.
 2. **Minimum effect:** turn the framing's `mde` into a relative or absolute number, and offer two or three alternatives with what each costs in sample size.

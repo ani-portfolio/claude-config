@@ -113,7 +113,7 @@ Every skill uses the same order, so they read alike:
 2. A one paragraph purpose, then the workflow sentence and a pointer to this file.
 3. **Ground rules:** never invent answers, never change input data, no raw rows, use the scripts, and the writing style rule.
 4. **Step 1: Find the project and the spec.** Run `ml_common.py root` and `status`, and read the sections this skill depends on. Modelling skills (split onwards) also run `ml_common.py gate`.
-5. The skill's own steps. Questions go in at most three AskUserQuestion rounds, lead with proposed answers marked (Recommended), and skip anything the spec answers. Each skill says what happens when AskUserQuestion is unavailable: take the recommended answers, write them as drafts or assumptions, and say so at the top of the reply.
+5. The skill's own steps. Ask one question at a time: exactly one question per message or AskUserQuestion call, then wait for the answer before asking the next. Never send a numbered list of questions. Lead with proposed answers marked (Recommended), push back on a vague answer with one follow up before moving on, and skip anything the spec or an earlier answer already settles. Each skill says what happens when AskUserQuestion is unavailable: take the recommended answers, write them as drafts or assumptions, and say so at the top of the reply.
 6. **Build and run the notebook**, which updates the spec, second to last.
 7. **Report back**, last, with these parts in this order: Files written, Summary, Problems, Open questions, and Next step (which names the next skill).
 

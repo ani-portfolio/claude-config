@@ -38,7 +38,7 @@ It prints the size, each column's type and distinct count, the candidate unit, g
 
 ## Step 3: Confirm with the user
 
-Ask with at most two AskUserQuestion rounds. Put the script's guess first and mark it (Recommended). Skip anything the spec or the user already settled.
+Ask one question at a time, one AskUserQuestion call per question, and wait for each answer before asking the next. Put the script's guess first and mark it (Recommended). Skip anything the spec or the user already settled.
 
 1. **Unit and group columns,** and how the labels map to the variants in the framing.
 2. **Metric columns** for each metric in the framing. A metric with no column is a failure for the primary and a warning for the others.

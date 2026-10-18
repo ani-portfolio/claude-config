@@ -52,7 +52,7 @@ Do not report differences that are intended and explained, such as k of 50 on th
 
 ## Step 4: Agree the fixes with the user
 
-Show a short table of the findings: number, what disagrees, where each note lives, and the proposed fix. Then ask with AskUserQuestion, up to four findings per call, one question per finding. For each, the options are:
+Show a short table of the findings: number, what disagrees, where each note lives, and the proposed fix. Then ask with AskUserQuestion one finding at a time, one call per finding, and wait for each answer before asking about the next. For each, the options are:
 
 * "Update the earlier note (Recommended)" when the later decision is the current one, with the new wording in the description.
 * "Keep the earlier note and change the later one" when the later step drifted. If that needs different work rather than different words, say which skill to run instead.

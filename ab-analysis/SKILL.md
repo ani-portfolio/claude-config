@@ -37,7 +37,7 @@ If the gate exits with code 1, say which step to run first (a confirmed **ab-tes
 
 ## Step 2: Settle the settings
 
-Most settings come from the spec. Ask with one AskUserQuestion round only about what is missing or worth a choice:
+Most settings come from the spec. Ask only about what is missing or worth a choice, one question at a time, one AskUserQuestion call per question:
 
 1. **Minimum effect** (`mde_abs`), when the design has none: offer the framing's `mde` turned into the units of the primary metric (0.005 for half a percentage point), and "Skip the practical significance check".
 2. **CUPED,** only when `data.pre_treatment_cols` has a numeric column that likely predicts the metric (for example spend before the test). "None" otherwise, and say why.

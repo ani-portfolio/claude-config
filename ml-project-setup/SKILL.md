@@ -66,7 +66,7 @@ Extra package groups (pass with `--extras`, comma separated): `sklearn` (scikit-
 
 ## Step 2: Ask the setup questions
 
-Ask with one AskUserQuestion call (up to three questions), leaving out anything the request or an existing `ml_spec.yaml` already answers:
+Ask one question at a time, one AskUserQuestion call per question, and wait for each answer before asking the next, leaving out anything the request or an existing `ml_spec.yaml` already answers:
 
 1. **Description.** "What is this project about, in one sentence?" This goes into the spec, CLAUDE.md, and README.md, and ml-business-framing uses it as the first draft of the business goal. Offer two or three guesses from the folder name and context, and the user can type their own.
 2. **Move to pyproject.toml**, only when the status check shows the project uses `requirements.txt`. Question: "This project uses requirements.txt. Should I move it to pyproject.toml and uv.lock?" Options: "Yes, create pyproject.toml" (Recommended), described as "requirements.txt is kept until you delete it", and "No, keep requirements.txt". If yes, add `--to-pyproject`.

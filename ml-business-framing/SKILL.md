@@ -1,6 +1,6 @@
 ---
 name: ml-business-framing
-description: Frame the business problem behind an ML project before anyone looks at the data, step 2 of the ML project skills. Covers the business goal and KPI, the decision the output supports and who acts on it, today's approach, the outcome to predict in business terms, how the output will be used, what would make V1 worth using, whether ML is needed at all, and constraints. Asks short rounds of questions, pushes back on vague answers, and writes notebooks/01_business_framing.ipynb with the reasoning and decisions; running it writes the business section of the shared ml_spec.yaml and a short summary for stakeholders. Use when starting a new model or analytics project, or when asked to scope, frame, or write up the business problem.
+description: Frame the business problem behind an ML project before anyone looks at the data, step 2 of the ML project skills. Covers the business goal and KPI, the decision the output supports and who acts on it, today's approach, the outcome to predict in business terms, how the output will be used, what would make V1 worth using, whether ML is needed at all, and constraints. Asks one question at a time, each with a proposed answer, pushes back on vague answers, and writes notebooks/01_business_framing.ipynb with the reasoning and decisions; running it writes the business section of the shared ml_spec.yaml and a short summary for stakeholders. Use when starting a new model or analytics project, or when asked to scope, frame, or write up the business problem.
 allowed-tools: Bash(python3 ${CLAUDE_SKILL_DIR}/scripts/*), Bash(.venv/bin/python ${CLAUDE_SKILL_DIR}/scripts/*)
 ---
 
@@ -17,7 +17,7 @@ Nothing in this skill needs the data. The exact target, unit of prediction, pred
 1. **Never invent answers.** When something is inferred from files or context rather than said by the user, propose it as a draft for the user to confirm. Anything still unconfirmed goes in `assumptions` or `open_questions`, never silently into the framing.
 2. **Push back.** When an answer is vague or does not connect to a decision, say so plainly, explain why in one or two sentences, and suggest a better answer. "Build a churn model" is not a business goal.
 3. **Concluding that ML is not needed is a good result.** If a rule, a report, or a dashboard would serve the decision as well, say so.
-4. **Keep the interview short.** At most three rounds of questions. Lead with a proposed answer wherever one can be inferred. Skip anything the request, the spec, or the files already answer.
+4. **One question at a time.** Ask exactly one question per message, then wait for the answer before asking the next. Never send a numbered list of questions, and never put more than one question in an AskUserQuestion call. Lead with a proposed answer wherever one can be inferred. Keep the interview short by skipping anything the request, the spec, the files, or an earlier answer already settles.
 5. **Stay on the business side.** Do not ask about columns, tables, or time windows. If the user brings them up, note them as assumptions for ml-problem-framing.
 6. **Use the scripts.** `scripts/make_notebook.py` builds and runs the notebook, and the notebook writes the spec through `scripts/nb_common.py`. Do not edit the `business` section of the spec by hand.
 7. **Writing style.** Use simple language and full sentences. Use plain headings. Do not use dashes as punctuation.
@@ -41,27 +41,28 @@ If `notebooks/01_business_framing.ipynb` exists, read its decision cells too. Th
 
 Do this silently and quickly, so the first questions already carry good guesses: the user's request, `project.description` in the spec (the first draft of the business goal), and anything the user points to, such as a brief, a ticket, a slide, or a previous summary like `docs/system_summary.md` from the `ml-system-summary` skill. `reference/question_bank.md` lists every field, why it matters, what a good answer looks like, and the red flags.
 
-## Step 3: Ask in up to three rounds
+## Step 3: Ask one question at a time
 
 If AskUserQuestion is unavailable or the user is not present, skip to Step 5 with the drafts written as `status: draft`, and list every unconfirmed field under `open_questions`.
 
-**Round 1 (plain text).** These need free text, so ask them in one plain message, numbered, with your draft answer after each so the user can reply "yes" or correct it:
+Go through the questions below in order, one per message. Wait for the answer before moving on. After each answer, check it against the red flags in `reference/question_bank.md`. If it is vague or does not connect to a decision, push back with one follow up question before moving on. Skip a question when its answer is already settled, and adjust the drafts of later questions to fit what the user has said so far.
+
+**Free text questions (plain message).** Ask each one on its own, followed by your draft answer, so the user can reply "yes" or correct it:
 
 1. What business goal is this for, and which KPI shows whether it improved?
-2. What decision or action will the output drive, who acts on it, and is there a capacity limit (for example 500 calls a week)?
-3. How is that decision made today?
-4. In business terms, what should be predicted? For example "customers who are about to stop ordering".
+2. What decision or action will the output drive, and who acts on it?
+3. Is there a capacity limit on that action (for example 500 calls a week)?
+4. How is that decision made today?
+5. In business terms, what should be predicted? For example "customers who are about to stop ordering".
 
-Wait for the answers before Round 2.
+**Choice questions (AskUserQuestion, one question per call).** Put the best guess first and mark it (Recommended).
 
-**Round 2 (AskUserQuestion, up to four questions).** Put the best guess first and mark it (Recommended).
+6. **How the output is used:** a ranked list for a fixed capacity, a yes or no decision at a threshold, a probability used as a number, a quantity, or something else. Explain in each description which metric family it leads to (see the table in `reference/question_bank.md`).
+7. **What would make V1 worth using,** stated against today's approach. Offer two or three options, for example "catches more at the same volume" or "same catch rate with less manual review".
+8. **Constraints:** batch or real time, explainability, and data or attributes that may not be used. `multiSelect: true`.
+9. **Who uses the output,** only when it is not clear from question 2.
 
-1. **How the output is used:** a ranked list for a fixed capacity, a yes or no decision at a threshold, a probability used as a number, a quantity, or something else. Explain in each description which metric family it leads to (see the table in `reference/question_bank.md`).
-2. **What would make V1 worth using,** stated against today's approach. Offer two or three options, for example "catches more at the same volume" or "same catch rate with less manual review".
-3. **Constraints:** batch or real time, explainability, and data or attributes that may not be used. `multiSelect: true`.
-4. **Who uses the output,** when it is not clear from Round 1.
-
-**Round 3 (only if needed).** Ask about anything still unclear, such as out of scope items or a feedback loop (will acting on the output change the outcome it predicts?).
+**Follow ups (only if needed, still one at a time).** Ask about anything still unclear, such as out of scope items or a feedback loop (will acting on the output change the outcome it predicts?).
 
 ## Step 4: Pressure test and confirm
 

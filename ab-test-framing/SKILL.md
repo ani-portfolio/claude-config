@@ -1,6 +1,6 @@
 ---
 name: ab-test-framing
-description: Frame an A/B test before anyone looks at its results, step 1 of the A/B testing skills. Covers the hypothesis and the change, the decision the result informs and who owns it, the unit of randomisation and the population, the variants with their planned split, one primary metric with secondary and guardrail metrics, the smallest effect worth acting on, and the ship rule. Asks short rounds of questions, pushes back on vague hypotheses, several primary metrics, and unit mismatches, and writes notebooks/ab01_test_framing.ipynb; running it writes the framing section of the shared ab_spec.yaml and a test plan for stakeholders. Use when starting an experiment or campaign test, or when asked to define the hypothesis, metrics, or success criteria of a test.
+description: Frame an A/B test before anyone looks at its results, step 1 of the A/B testing skills. Covers the hypothesis and the change, the decision the result informs and who owns it, the unit of randomisation and the population, the variants with their planned split, one primary metric with secondary and guardrail metrics, the smallest effect worth acting on, and the ship rule. Asks one question at a time, each with a proposed answer, pushes back on vague hypotheses, several primary metrics, and unit mismatches, and writes notebooks/ab01_test_framing.ipynb; running it writes the framing section of the shared ab_spec.yaml and a test plan for stakeholders. Use when starting an experiment or campaign test, or when asked to define the hypothesis, metrics, or success criteria of a test.
 allowed-tools: Bash(python3 ${CLAUDE_SKILL_DIR}/scripts/*), Bash(.venv/bin/python ${CLAUDE_SKILL_DIR}/scripts/*)
 ---
 
@@ -18,7 +18,7 @@ Nothing here needs the data, and no results are looked at. Column names are matc
 2. **Never look at results.** Do not compute group rates or differences while framing, even when the data is in the folder. Framing after seeing results is how goalposts move. Reading column names to propose drafts is fine.
 3. **The planned split comes from how the test was set up, not from the data.** If the user does not know it, record it as an open question for validation, and do not fill it from the observed counts.
 4. **Push back.** One primary metric. A unit that matches the randomisation. A decision that depends on the result. A minimum effect with a reason. Explain each objection in one or two sentences and suggest a better answer.
-5. **Keep the interview short.** At most three rounds. Lead with proposed answers. Skip what the request, the spec, or the conversation already answers.
+5. **One question at a time.** Ask exactly one question per message, then wait for the answer before asking the next. Never send a numbered list of questions, and never put more than one question in an AskUserQuestion call. Lead with proposed answers. Keep the interview short by skipping what the request, the spec, the conversation, or an earlier answer already settles.
 6. **Use the scripts.** `scripts/make_notebook.py` builds and runs the notebook, and the notebook writes the spec. Do not edit the `framing` section by hand.
 7. **Writing style.** Use simple language and full sentences. Use plain headings. Do not use dashes as punctuation.
 
@@ -39,25 +39,28 @@ If `notebooks/ab01_test_framing.ipynb` exists, read its decision cells; the user
 
 Silently: the request, `project.description`, the conversation, and the data file names and column names in the raw data folder (`PY ${CLAUDE_SKILL_DIR}/scripts/ab_common.py columns <file>`, which prints names and types only). `reference/question_bank.md` lists every field, what a good answer looks like, and the red flags.
 
-## Step 3: Ask in up to three rounds
+## Step 3: Ask one question at a time
 
 If AskUserQuestion is unavailable or the user is not present, skip to Step 5 with the drafts as `status: draft`, and list every unconfirmed field under `open_questions`.
 
-**Round 1 (plain text).** In one numbered message, with your draft after each, so the user can reply "yes" or correct it:
+Go through the questions below in order, one per message, and wait for each answer before moving on. After each answer, check it against the red flags in `reference/question_bank.md`, and if it is vague or breaks a ground rule, push back with one follow up question before moving on. Skip a question when its answer is already settled, and adjust later drafts to fit the answers so far.
+
+**Free text questions (plain message).** Ask each one on its own, followed by your draft, so the user can reply "yes" or correct it:
 
 1. What changed between the groups, and what do you expect it to do (the hypothesis)?
 2. What decision depends on the result, and who makes it?
-3. What was randomised (user, session, store), and who was eligible?
-4. What were the groups called, and what share of units was each **planned** to get?
+3. What was randomised (user, session, store)?
+4. Who was eligible for the test?
+5. What were the groups called, and what share of units was each **planned** to get?
 
-**Round 2 (AskUserQuestion, up to four questions).** Best guess first, marked (Recommended).
+**Choice questions (AskUserQuestion, one question per call).** Best guess first, marked (Recommended).
 
-1. **Primary metric:** offer the two or three candidates that fit the hypothesis, each with its type and good direction.
-2. **Guardrails** (multiSelect): harms worth watching, and "None needed".
-3. **Smallest effect worth acting on:** two or three options with a reason (for example the cost of the change), and "Not decided".
-4. **Test state:** planned, running, or finished, if not clear.
+6. **Primary metric:** offer the two or three candidates that fit the hypothesis, each with its type and good direction.
+7. **Guardrails** (multiSelect): harms worth watching, and "None needed".
+8. **Smallest effect worth acting on:** two or three options with a reason (for example the cost of the change), and "Not decided".
+9. **Test state:** planned, running, or finished, only if not clear.
 
-**Round 3 (only if needed).** The ship rule, secondary metrics, and anything still unclear.
+**Follow ups (only if needed, still one at a time).** The ship rule, secondary metrics, and anything still unclear.
 
 ## Step 4: Pressure test and confirm
 

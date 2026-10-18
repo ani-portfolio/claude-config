@@ -47,13 +47,13 @@ It prints the stages done, the last review (its date, open counts, and the stage
 
 ## Step 3: Ask about the scope
 
-**Round 1 (AskUserQuestion).** "Should the review cover the whole project, or only some stages?" Options:
+**First question (AskUserQuestion).** "Should the review cover the whole project, or only some stages?" Options:
 
 * "The whole project (Recommended)": every stage that is done.
 * "Only the stages that ran again since the last review" (offer this only when there was a review and some stages ran since; name them).
 * "Choose the stages".
 
-**Round 2, only for "Choose the stages" (AskUserQuestion, `multiSelect: true`).** "Which stages should be reviewed?" Offer the groups that have stages done, at most four: "Framing and EDA", "Split and features", "Baseline and training", "Evaluation". Map them to `framing, eda`, `split, features`, `baseline, training`, and `evaluation`.
+**Second question, only for "Choose the stages" (AskUserQuestion, `multiSelect: true`), after the first is answered.** "Which stages should be reviewed?" Offer the groups that have stages done, at most four: "Framing and EDA", "Split and features", "Baseline and training", "Evaluation". Map them to `framing, eda`, `split, features`, `baseline, training`, and `evaluation`.
 
 If AskUserQuestion is unavailable or the user is not present, review the whole project and say so at the top of the reply.
 

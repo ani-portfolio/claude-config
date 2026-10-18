@@ -67,7 +67,7 @@ If a required package (pandas, numpy, matplotlib, seaborn) is missing, show the 
 
 ## Step 3: Ask the setup questions
 
-Settle the output format, the save location, and (only when Step 1 says so) the target before running anything. Ask with AskUserQuestion in two rounds, so the user answers at most four short questions. Leave out any question the request already answers.
+Settle the output format, the save location, and (only when Step 1 says so) the target before running anything. Ask with AskUserQuestion one question at a time, one question per call, and wait for each answer before asking the next. The user answers at most four short questions. Leave out any question the request already answers.
 
 **Gather the facts first.** Run both commands with the interpreter from Step 2. Neither prints data values.
 
@@ -82,7 +82,7 @@ PY ${CLAUDE_SKILL_DIR}/scripts/run_eda.py <data file> --suggest-locations
 
 For a DataFrame in a notebook, skip both commands. Read the notebook's code (not its outputs) for the column names and hints such as `y = df["label"]` or a `train_test_split` call. If the columns are not visible, ask for the target name in plain text.
 
-**Round 1** (one AskUserQuestion call with up to two questions):
+**Questions** (in this order, one AskUserQuestion call each):
 
 1. **Output format**, only outside an ML project, and only when the request did not say. Question: "Should the EDA be a Jupyter notebook or a markdown report?" Options: "Jupyter notebook (.ipynb)", described as "Runs top to bottom, each section can be rerun, raw rows shown once with df.head()", and "Markdown report (.md)", described as "A single file with tables and PNG plots, no raw rows". Put markdown first and mark it (Recommended), unless the user's wording points to working interactively.
 2. **Target column**, only when Step 1 says to ask (the skill is used on its own, or the user wants target analysis before the framing is confirmed). Ask even when the inference seems certain or the user already named a column, unless the user said to skip target analysis. If the spec names a target that is not in the data, say so in the question.
@@ -92,8 +92,6 @@ For a DataFrame in a notebook, skip both commands. Read the notebook's code (not
    * If the user picks "No target", run without `--target`, skip the target type question, and leave out `target` and `target_type` in the notebook DataFrame workflow. The Target Analysis section then says it was skipped and how to turn it on later.
    * If the user named a target and it exists, make it the recommended option. If it does not exist exactly, say so in the question and offer the closest matches the script printed.
    * If the user types a name that is not a column, rerun `--list-columns --target <name>` and ask again with the closest matches.
-
-**Round 2** (one AskUserQuestion call with up to two questions):
 
 3. **Save location**, only outside an ML project, and only when the request did not give one. Question: "Where should I save `<file name from --suggest-locations>`?" Use the paths `--suggest-locations` printed for the chosen format, recommended first and marked (Recommended), up to four options. The first is the standard project folder from the spec. Say in the description when a folder is the standard project folder, another notebook or experimentation folder, when it is next to the data, and when a file already exists there and would be overwritten. The user can type another path. For markdown, the plots go in an `eda_plots/<file name>/` folder next to the report.
 4. **Target type**, only when a target was chosen, the request did not already say the type, and the target did not come from a confirmed framing. Ask even when the type seems obvious, because a 0 or 1 column or an integer score can be either.
@@ -127,7 +125,7 @@ The script prints the mode it used, writes the `eda` section of `ml_spec.yaml`, 
    PY ${CLAUDE_SKILL_DIR}/scripts/run_eda.py --kernel-status
    ```
 
-   If it prints "Registered Jupyter kernel: no", ask with AskUserQuestion (it can go in Round 2 of Step 3): "Register this project's Python environment as a Jupyter kernel so VS Code and Jupyter select it automatically? This adds one small kernel file in your user Jupyter folder." Options: "Yes, register it" (Recommended) and "No, I will select the kernel myself". If the user says yes, add `--register-kernel` to the command below. Never register a kernel without asking.
+   If it prints "Registered Jupyter kernel: no", ask with AskUserQuestion (as its own question, after the Step 3 questions): "Register this project's Python environment as a Jupyter kernel so VS Code and Jupyter select it automatically? This adds one small kernel file in your user Jupyter folder." Options: "Yes, register it" (Recommended) and "No, I will select the kernel myself". If the user says yes, add `--register-kernel` to the command below. Never register a kernel without asking.
 2. Run:
 
    ```bash

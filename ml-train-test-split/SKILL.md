@@ -55,17 +55,15 @@ It prints the gate, the data size, the class balance, the date range, rows per e
 
 If the target is not a column yet (`framing.target.exists_in_data` is false), write the body of `build_target(df)` from `framing.target.construction` with the user, as `target_code` in the answers. It must use only information known when the outcome is decided, and it runs before the split.
 
-## Step 3: Ask in up to two rounds
+## Step 3: Ask one question at a time
 
-Ask with AskUserQuestion. Put the recommendation first and mark it (Recommended), and say in each description what it means for the score.
-
-**Round A.**
+Ask one question at a time, one AskUserQuestion call per question, and wait for each answer before asking the next. Put the recommendation first and mark it (Recommended), and say in each description what it means for the score.
 
 1. **Strategy:** time, group, or random, with the reason from `--suggest`. If the framing has a prediction time column or the task is forecasting, recommend time, and explain that a random split would let the model see the future.
 2. **Test set:** for time, the test period in days and the gap (offer the recommended values and one shorter and one longer test period, with how much training history each leaves). For random and group, the test share (0.2 recommended, 0.25 or 0.3 for small data).
 3. **Cross validation folds:** the number of folds. For time, also the validation window and expanding or sliding window. Cross validation on the training set is the default way later stages compare models.
 
-**Round B (only if needed).**
+**Only if needed, still one at a time:**
 
 4. **Duplicates,** when there are exact duplicate rows: keep together (Recommended), drop, or ignore.
 5. **Group column,** when the group strategy is chosen and there is more than one candidate entity column.

@@ -48,17 +48,15 @@ PY ${CLAUDE_SKILL_DIR}/scripts/make_notebook.py --suggest
 
 It prints the training size, the proposed inputs by type, every column left out with its reason, and a recommended answers YAML with a reason for every feature. For forecasting it proposes lags and rolling means of the target shifted by the horizon, calendar parts, and the series ID as a category.
 
-## Step 3: Ask in up to two rounds
+## Step 3: Ask one question at a time
 
-Ask with AskUserQuestion. Put the recommendation first and mark it (Recommended).
-
-**Round A.**
+Ask one question at a time, one AskUserQuestion call per question, and wait for each answer before asking the next. Put the recommendation first and mark it (Recommended).
 
 1. **Columns left out:** list them with reasons, and ask whether any should be used (`multiSelect: true`, recommended: none). A column with unknown timing can only be used after the user says when it is filled in.
 2. **New features:** the proposed row and history steps (logs, days since, ratios, lags, rolling windows), with a recommendation. Ask in plain text whether the user has domain features in mind, such as a ratio or a count; simple ones go in `ratios`, others in `src/custom_features.py`.
 3. **Calendar parts,** when there is a date: recommend only what the history supports (see `reference/feature_rules.md`).
 
-**Round B (only if needed).**
+**Only if needed, still one at a time:**
 
 4. **High cardinality columns:** confirm TargetEncoder (Recommended), or leave a column out.
 5. **Forecasting:** the lag days and rolling windows, with the horizon as the minimum.

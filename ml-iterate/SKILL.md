@@ -64,7 +64,7 @@ Say plainly when the honest finding may be that the data cannot support more. St
 
 ## Step 3: Agree the plan
 
-Ask with AskUserQuestion: which changes to make (`multiSelect: true`, the recommended ones first), and confirm the hypothesis, one sentence on what should improve and why. Write the plan to a YAML file in the scratch folder with the keys in `templates/iteration_plan.example.yaml`.
+Ask with AskUserQuestion, one question per call: first which changes to make (`multiSelect: true`, the recommended ones first), then, after that answer, confirm the hypothesis, one sentence on what should improve and why. Write the plan to a YAML file in the scratch folder with the keys in `templates/iteration_plan.example.yaml`.
 
 If AskUserQuestion is unavailable or the user is not present, make no changes: show the diagnosis and the proposed plan, and stop.
 

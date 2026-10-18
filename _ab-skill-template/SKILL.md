@@ -45,7 +45,7 @@ If it exits with code 1, say which step to run first and stop. Continue only if 
 
 ## Step 2: Ask the questions
 
-At most three AskUserQuestion rounds of up to four questions each. Take every answer the spec already gives. Put the best option first and mark it (Recommended).
+Ask one question at a time, one per message or AskUserQuestion call, and wait for each answer before asking the next. Take every answer the spec already gives. Put the best option first and mark it (Recommended).
 
 1. <Question>: <how to build the options from the spec>.
 

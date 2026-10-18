@@ -41,7 +41,7 @@ Read `business` too. The business outcome (`business.outcome`) tells you which s
 
 ## Step 2: Choose the sources
 
-List the files in the `data_raw` folder (names and sizes only, for example with `ls -la`). Then ask with one AskUserQuestion call, leaving out what the request already answers:
+List the files in the `data_raw` folder (names and sizes only, for example with `ls -la`). Then ask one question at a time, one AskUserQuestion call per question, and wait for each answer before asking the next, leaving out what the request already answers:
 
 1. **Which files to include** (`multiSelect: true`), when there are several. Recommend all data files, and leave out obvious extras such as lookup tables only if the user agrees.
 2. **The main source:** the one the model will most likely be trained on, for example the table with one row per customer and scoring date. Recommend the one that best fits `business.outcome`, otherwise the largest. The framing hints describe this source.
