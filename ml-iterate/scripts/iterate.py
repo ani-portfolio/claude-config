@@ -14,6 +14,7 @@ Commands (run from the project root with the project's Python):
     iterate.py remaining [--json]          # the stages of the open iteration that have not run again yet
     iterate.py carry-forward [--json]      # the previous champion as a model entry for ml-model-training
     iterate.py compare [--json]            # every iteration side by side
+    iterate.py bar [--json]                # the iteration bar: does the new champion really beat the carried one?
     iterate.py close --outcome kept|rolled_back|stopped --reason "..." [--restore] [--dry-run]
 
 plan.yaml:
@@ -300,19 +301,9 @@ def diagnose(spec, root):
                               "low": m.get("low"), "high": m.get("high"), "cv": m.get("cv"), "bias": m.get("bias"),
                               "cv_std": (cv.get(m.get("model")) or {}).get("primary_std")})
 
-    # Per fold scores of each model's best trial, from the run log.
-    runs_path = os.path.join(paths["data_processed"], "training_runs.parquet")
-    per_fold = {}
-    if os.path.exists(runs_path):
-        try:
-            import pandas as pd
-            runs = pd.read_parquet(runs_path)
-            runs = runs[runs["data_version"] == tr.get("data_version")]
-            for name, g in runs.groupby("model"):
-                best = g.loc[g["primary_mean"].idxmin()] if _lower_better(tr) else g.loc[g["primary_mean"].idxmax()]
-                per_fold[name] = json.loads(best["folds"])
-        except Exception as e:  # pragma: no cover
-            out["flags"].append(f"Could not read the run log: {e}")
+    per_fold, err = best_trial_folds(spec, root)
+    if err:  # pragma: no cover
+        out["flags"].append(f"Could not read the run log: {err}")
     out["per_fold"] = per_fold
 
     folds = (sp.get("cv") or {}).get("folds") or []
@@ -368,6 +359,59 @@ def diagnose(spec, root):
         out["flags"].append(f"Weak slice: {s.get('slice')} = {s.get('value')}.")
     if st["test_look"] > 1:
         out["flags"].append(f"The test set has been opened {st['test_look']} times; scores after the first are optimistic.")
+    return out
+
+
+def best_trial_folds(spec, root):
+    """Per fold CV scores of each model's best trial in the current data version, from the run log, as
+    ({model: [scores in fold order]}, error or None)."""
+    tr = spec.get("training") or {}
+    runs_path = os.path.join(ml_common.project_paths(spec, root)["data_processed"], "training_runs.parquet")
+    per_fold = {}
+    if not os.path.exists(runs_path):
+        return per_fold, None
+    try:
+        import pandas as pd
+        runs = pd.read_parquet(runs_path)
+        runs = runs[runs["data_version"] == tr.get("data_version")]
+        for name, g in runs.groupby("model"):
+            best = g.loc[g["primary_mean"].idxmin()] if _lower_better(tr) else g.loc[g["primary_mean"].idxmax()]
+            per_fold[name] = json.loads(best["folds"])
+    except Exception as e:  # pragma: no cover
+        return per_fold, str(e)
+    return per_fold, None
+
+
+def bar_result(spec, root, entry=None):
+    """The iteration bar for an iteration (the open one by default): the new champion against the champion carried
+    forward, on the same folds. See ml_common.iteration_bar_evaluate."""
+    e = entry or _open_entry(spec)
+    bar = ml_common.iteration_bar(spec)
+    out = {"status": "incomplete", "new": None, "carried": None, "detail": ""}
+    if not e:
+        out["detail"] = "No iteration is open."
+        return out
+    new = ((spec.get("training") or {}).get("champion") or {}).get("name")
+    carried = (e.get("carried_forward") or {}).get("name")
+    out.update(new=new, carried=carried)
+    if not carried:
+        out["detail"] = ("The previous champion was not carried forward into this training run, so the two cannot be "
+                         "compared on the same folds. Run `iterate.py carry-forward` before training.")
+        return out
+    if not new:
+        out["detail"] = "Training has not run in this iteration yet."
+        return out
+    if new == carried:
+        out.update(status="fail", wins=0, detail=f"The carried champion {carried} is still the best model, so no new "
+                   "model beat it.")
+        return out
+    per_fold, err = best_trial_folds(spec, root)
+    res = ml_common.iteration_bar_evaluate(per_fold.get(new), per_fold.get(carried),
+                                           _lower_better(spec.get("training") or {}), bar)
+    if err:
+        res["detail"] = f"Could not read the run log: {err}"
+    out.update(res)
+    out["detail"] = f"{new} against {carried}: " + res["detail"]
     return out
 
 
@@ -506,6 +550,8 @@ def open_iteration(spec, root, spec_path, plan, dry_run=False):
         return {"ok": True, "dry_run": True, "entry": entry, "files": _snapshot_files(spec, root, spec_path)}
     copied, skipped = snapshot(spec, root, spec_path, dest)
     notes = _start_version(spec, root, spec_path, entry)
+    if not it.get("bar"):
+        it["bar"] = dict(ml_common.ITERATION_BAR_DEFAULTS)
     it["entries"].append(entry)
     it["current"] = n
     _decision(spec, f"Opened iteration {n} ({entry['version']}): {entry['hypothesis']}",
@@ -602,7 +648,7 @@ def compare(spec, root):
         s = entries[0]["start"]
         rows.append({"iteration": 0, "champion": s.get("champion"), "cv": s.get("cv"), "test": s.get("test"),
                      "test_look": s.get("test_look"), "folds": entries[0]["start_hashes"]["split_cv"],
-                     "outcome": "original", "carried_forward_cv": None})
+                     "outcome": "original", "carried_forward_cv": None, "bar": None})
     for e in entries:
         end = e.get("end") or (_champion_state(spec) if e.get("status") == "open" else {})
         lb = {r.get("model"): r for r in (spec.get("training") or {}).get("leaderboard") or []}
@@ -615,7 +661,9 @@ def compare(spec, root):
         rows.append({"iteration": e["id"], "champion": end.get("champion"), "cv": end.get("cv"),
                      "test": end.get("test"), "test_look": end.get("test_look"), "folds": folds,
                      "outcome": e.get("outcome") or "open", "carried_forward_cv": ccv,
-                     "hypothesis": e.get("hypothesis")})
+                     "hypothesis": e.get("hypothesis"),
+                     "bar": ((e.get("bar_result") if e.get("status") != "open" else bar_result(spec, root, e))
+                             or {}).get("status")})
     for r in rows:
         r["same_folds_as_previous"] = None
     for a, b in zip(rows, rows[1:]):
@@ -642,8 +690,10 @@ def close_iteration(spec, root, spec_path, outcome, reason, do_restore=False, dr
     end["carried_forward_cv"] = (lb.get(carried) or {}).get("primary_mean") if carried else None
     if end.get("test") is not None and end["test_look"] <= e["start"].get("test_look", 0):
         end["test"] = None   # the evaluation shown is from before the iteration
+    bar = bar_result(spec, root, e)
     closed = {**e, "status": "closed", "closed_at": _now(), "outcome": outcome, "reason": reason.strip(), "end": end,
-              "not_rerun": left}
+              "not_rerun": left, "bar_result": {k: bar.get(k) for k in ("status", "wins", "folds", "mean_diff", "spread",
+                                                                         "detail")}}
     if dry_run:
         return {"ok": True, "dry_run": True, "entry": closed}
     it = _iters(spec)
@@ -679,7 +729,7 @@ def record_carry(spec, spec_path, cf):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("command", choices=["diagnose", "open", "remaining", "carry-forward", "compare", "close"])
+    ap.add_argument("command", choices=["diagnose", "open", "remaining", "carry-forward", "compare", "bar", "close"])
     ap.add_argument("plan", nargs="?", help="open: the plan file")
     ap.add_argument("--spec", help="Spec path (default: ml_spec.yaml at the project root)")
     ap.add_argument("--json", action="store_true", help="Print the result as JSON")
@@ -761,17 +811,26 @@ def main():
             return
         label = (spec.get("training") or {}).get("primary_label") or "metric"
         print(f"| Iteration | Champion | CV {label} | Test {label} | Test look | Same folds as before | "
-              "Previous champion on these folds | Outcome |")
-        print("|---|---|---|---|---|---|---|---|")
+              "Previous champion on these folds | Iteration bar | Outcome |")
+        print("|---|---|---|---|---|---|---|---|---|")
         for r in rows:
             same = "" if r["same_folds_as_previous"] is None else ("yes" if r["same_folds_as_previous"] else "no")
             print(f"| {r['iteration']} | {r['champion']} | {_f(r['cv'])} | {_f(r['test'])} | {r['test_look'] or ''} | "
-                  f"{same} | {_f(r['carried_forward_cv'])} | {r['outcome']} |")
+                  f"{same} | {_f(r['carried_forward_cv'])} | {r.get('bar') or ''} | {r['outcome']} |")
         if any(r["same_folds_as_previous"] is False for r in rows):
             print("\nCV scores on different folds are not like for like. Compare with the previous champion's score "
                   "on the same folds where it was carried forward.")
         if any((r.get("test_look") or 0) > 1 for r in rows):
             print("Test scores from the second look onwards are optimistic.")
+
+    elif a.command == "bar":
+        res = bar_result(spec, root)
+        res["bar"] = ml_common.iteration_bar(spec)
+        lines = [f"Iteration bar: {res['status']}. {res['detail']}",
+                 f"The bar: win on more than {res['bar']['min_fold_win_share']:.0%} of the folds, with a mean improvement "
+                 f"larger than {res['bar']['spread_multiple']:g} times the spread of the per fold differences "
+                 f"(at least {res['bar']['min_folds']} folds). Edit it under iterations.bar in the spec."]
+        _say(res, a.json, lines)
 
     else:
         if not a.outcome or not a.reason:
@@ -788,6 +847,10 @@ def main():
         end = e["end"]
         print(f"End state: champion {end.get('champion')}, CV {_f(end.get('cv'))}, test {_f(end.get('test'))}, "
               f"test look {end.get('test_look')}.")
+        print(f"Iteration bar: {(e.get('bar_result') or {}).get('status')}. {(e.get('bar_result') or {}).get('detail')}")
+        if a.outcome == "kept" and (e.get("bar_result") or {}).get("status") == "fail":
+            print("Kept although the bar failed: record why in a decision that names this iteration and the bar, or "
+                  "/ml-status will flag it.")
         if e.get("not_rerun"):
             print("Not rerun in this iteration: " + ", ".join(e["not_rerun"]) + ".")
         if res.get("backup"):

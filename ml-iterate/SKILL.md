@@ -109,11 +109,21 @@ Show the comparison:
 PY ${CLAUDE_SKILL_DIR}/scripts/iterate.py compare
 ```
 
+Then apply the iteration bar:
+
+```bash
+PY ${CLAUDE_SKILL_DIR}/scripts/iterate.py bar
+```
+
+The bar asks whether the new champion really beats the champion carried forward, on the same folds: it must win on more than half of the folds, and its mean improvement must be larger than the spread of the per fold differences. A better mean CV score alone can be fold noise, which is why "keep" depends on the bar. The bar is in `iterations.bar` and the user can change it. Explain the result in one sentence.
+
 Ask the user for the outcome with AskUserQuestion:
 
-* **Keep the new state (Recommended when the new champion beats the carried one on CV):** `kept`.
-* **Roll back to the snapshot:** `rolled_back`. It restores the snapshot after backing up the current state to `.iterate_backup/<time>/`. The split and feature tables are not in the snapshot, so the split and features notebooks must run again to rebuild them.
+* **Keep the new state (Recommended only when the bar passes):** `kept`. If the user keeps it although the bar failed, record a decision that names the iteration and the bar and says why, because `/ml-status` flags it otherwise.
+* **Roll back to the snapshot (Recommended when the bar fails):** `rolled_back`. It restores the snapshot after backing up the current state to `.iterate_backup/<time>/`. The split and feature tables are not in the snapshot, so the split and features notebooks must run again to rebuild them.
 * **Stop iterating:** `stopped`, when the data cannot support more.
+
+When the bar is `incomplete` (no carried champion, fewer folds than `min_folds`, or missing per fold scores), say why and ask without a recommendation.
 
 Then:
 
