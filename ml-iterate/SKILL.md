@@ -66,7 +66,7 @@ Say plainly when the honest finding may be that the data cannot support more. St
 
 Ask with AskUserQuestion, one question per call: first which changes to make (`multiSelect: true`, the recommended ones first), then, after that answer, confirm the hypothesis, one sentence on what should improve and why. Write the plan to a YAML file in the scratch folder with the keys in `templates/iteration_plan.example.yaml`.
 
-If AskUserQuestion is unavailable or the user is not present, make no changes: show the diagnosis and the proposed plan, and stop.
+If AskUserQuestion is unavailable or the user is not present, make no changes: show the diagnosis and the proposed plan, and stop. The one exception is a round driven by **ml-autopilot**, which opens, records, and closes iterations through its own scripts (see "Rounds of experiments" below).
 
 ## Step 4: Open the iteration
 
@@ -138,6 +138,17 @@ Closing settles the version:
 
 * **Kept or stopped:** the version is promoted in MLflow (its stage runs become the current ones, and the alias `champion` moves to its champion, which also keeps the alias `champion-v2`), and git tags the version `v2`. Work stays on `ml/v2`.
 * **Rolled back:** the version is marked rejected in MLflow, and the runs of the restored state are made current again. Git commits the restored files on `ml/v2`, tags it `v2-rolled-back`, switches back to `ml/v1`, and commits the spec there with the record of the rollback. The branch `ml/v2` is kept for the record. Then suggest `/ml-reconcile-notes`, because notes written in the earlier iteration may now disagree with the new decisions.
+
+## Rounds of experiments (ml-autopilot)
+
+When ml-autopilot drives the project, an iteration is a round: its plan lists `experiments`, each one change, instead of one set of `changes`. Each experiment runs in its own git worktree, as the MLflow experiment `<version>-<id>` (V2-a) under the version's parent run, and the project does not change while they run. The commands for a round:
+
+* `iterate.py open <plan>`: as usual, plus one record per experiment with its rerun order, which never includes evaluation.
+* `iterate.py record-experiment <id> --result experiment_result.json`: the experiment's bar result and status (`passed`, `failed`, or `error`).
+* `iterate.py close --outcome kept --adopted <id> --reason "..."`: after ml-autopilot merged the experiment into the project. MLflow promotes that experiment's runs and moves the alias `champion`.
+* `iterate.py close --outcome rolled_back --none-passed --reason "..."`: no experiment passed, so there is nothing to restore.
+
+Do not run these by hand while ml-autopilot is running a round; `autopilot.py round open` and `round close` call them.
 
 ## Step 7: Report back
 

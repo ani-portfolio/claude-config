@@ -16,6 +16,9 @@ Commands (run from the project root with the project's Python):
     iterate.py compare [--json]            # every iteration side by side
     iterate.py bar [--json]                # the iteration bar: does the new champion really beat the carried one?
     iterate.py close --outcome kept|rolled_back|stopped --reason "..." [--restore] [--dry-run]
+    iterate.py record-experiment <id> --result result.json   # a round's experiment: its bar result and verdict
+    iterate.py close --outcome kept --adopted <id> --reason "..."     # a round: the experiment adopted into the project
+    iterate.py close --outcome rolled_back --none-passed --reason "..."   # a round where no experiment passed
 
 plan.yaml:
     hypothesis: One sentence on what should improve, and why.
@@ -23,6 +26,15 @@ plan.yaml:
     changes:
       - {stage: split, change: "Two expanding folds of 26 weeks instead of three of 13."}
       - {stage: features, change: "Add a post COVID slope and a third Fourier pair."}
+
+A round (ml-autopilot): the plan lists experiments instead of one set of changes. Each experiment is one change,
+run by an agent in its own git worktree (ml-autopilot's workspace.py) and logged to MLflow as the experiment
+<version>-<id> (V2-a, V2-b). The project itself does not change until the best experiment that passes the iteration
+bar is adopted; when none passes, the round closes as rolled back with nothing to restore.
+    hypothesis: What the round tries, in one sentence.
+    experiments:
+      - {id: a, hypothesis: "...", changes: [{stage: features, change: "..."}]}
+      - {id: b, hypothesis: "...", changes: [{stage: split, change: "..."}]}
 """
 
 from __future__ import annotations
@@ -46,6 +58,7 @@ SKILL = "ml-iterate"
 # through their own skills first; the rerun then starts at the ML framing.
 CHAIN = ["framing", "eda", "split", "features", "baseline", "training", "evaluation"]
 OUTCOMES = ("kept", "rolled_back", "stopped")
+EXPERIMENT_STATUS = ("planned", "running", "passed", "failed", "error", "adopted", "discarded")
 # Small result files copied into a snapshot. Large data (raw files, split sets, feature tables) is not copied.
 SMALL_RESULTS = ["cv_folds.parquet", "baseline_cv_results.parquet", "baseline_oof_predictions.parquet",
                  "training_runs.parquet", "training_oof_predictions.parquet", "test_predictions.parquet",
@@ -146,8 +159,9 @@ def _version_parent_run(spec_path, entry):
         return None
 
 
-def _settle_version(spec, root, spec_path, entry, outcome, reason):
-    """Close the version in MLflow and git. Returns notes."""
+def _settle_version(spec, root, spec_path, entry, outcome, reason, adopted=None):
+    """Close the version in MLflow and git. Returns notes. In a round, adopted names the experiment (V2-a) whose
+    runs become current; the version's own parent run is tagged with the verdict too."""
     notes = []
     v = _version(spec)
     ver = entry.get("version") or v["current"]
@@ -159,10 +173,13 @@ def _settle_version(spec, root, spec_path, entry, outcome, reason):
                 done = t.restore_current(spec_path)
                 notes.append(f"MLflow: {ver} rejected; the restored runs are current again ({', '.join(done or []) or 'none'})")
             else:
-                res = t.promote(spec_path, ver)
+                res = t.promote(spec_path, adopted or ver)
+                if adopted:
+                    t.promote(spec_path, ver)   # the version's parent run: its verdict; it holds no stage runs
+                    res = res or {}
                 if res:
-                    notes.append(f"MLflow: {ver} promoted" + (f"; alias champion is version {res['champion_version']}"
-                                                              if res.get("champion_version") else ""))
+                    notes.append(f"MLflow: {adopted or ver} promoted" + (
+                        f"; alias champion is version {res['champion_version']}" if res.get("champion_version") else ""))
         except Exception as ex:  # noqa: BLE001
             notes.append(f"MLflow: could not settle {ver}: {ex}")
     status = {"kept": "kept", "stopped": "kept (stopped iterating)", "rolled_back": "rolled_back"}[outcome]
@@ -524,7 +541,16 @@ def open_iteration(spec, root, spec_path, plan, dry_run=False):
         problems.append("There is no offline evaluation to iterate from. Run /ml-offline-evaluation first.")
     if not str(plan.get("hypothesis") or "").strip():
         problems.append("The plan needs a hypothesis: one sentence on what should improve, and why.")
+    experiments = plan.get("experiments") or []
     changes = plan.get("changes") or []
+    if experiments and not changes:   # a round: its changes are those of its experiments
+        changes = [c for x in experiments for c in (x.get("changes") or [])]
+    ids = [str(x.get("id") or "") for x in experiments]
+    if any(not i or not i.replace("_", "").isalnum() for i in ids) or len(set(ids)) != len(ids):
+        problems.append("Every experiment needs a short id of its own, in letters and digits (a, b, c).")
+    for x in experiments:
+        if not str(x.get("hypothesis") or "").strip() or not x.get("changes"):
+            problems.append(f"Experiment {x.get('id')} needs a hypothesis and at least one change.")
     if not changes:
         problems.append("The plan lists no changes.")
     for c in changes:
@@ -546,10 +572,18 @@ def open_iteration(spec, root, spec_path, plan, dry_run=False):
                               "custom_features": _hash_file(os.path.join(ml_common.project_paths(spec, root)["src"],
                                                                          "custom_features.py")),
                               "split_cv": _hash_obj(((spec.get("split") or {}).get("cv") or {}).get("folds"))}}
+    if experiments:
+        entry["experiments"] = [{"id": str(x["id"]), "hypothesis": str(x["hypothesis"]).strip(),
+                                 "changes": x["changes"],
+                                 # an experiment never opens the test set: it is judged on CV
+                                 "rerun": [st for st in _rerun_order(x["changes"]) if st != "evaluation"],
+                                 "status": "planned", "backlog": x.get("backlog")} for x in experiments]
     if dry_run:
         return {"ok": True, "dry_run": True, "entry": entry, "files": _snapshot_files(spec, root, spec_path)}
     copied, skipped = snapshot(spec, root, spec_path, dest)
     notes = _start_version(spec, root, spec_path, entry)
+    for x in entry.get("experiments") or []:
+        x["experiment"] = f"{entry['version']}-{x['id']}"
     if not it.get("bar"):
         it["bar"] = dict(ml_common.ITERATION_BAR_DEFAULTS)
     it["entries"].append(entry)
@@ -671,10 +705,49 @@ def compare(spec, root):
     return rows
 
 
-def close_iteration(spec, root, spec_path, outcome, reason, do_restore=False, dry_run=False):
+def _experiment(entry, exp_id):
+    return next((x for x in (entry or {}).get("experiments") or [] if str(x.get("id")) == str(exp_id)), None)
+
+
+def record_experiment(spec, spec_path, exp_id, result):
+    """Record what one experiment of the open round found: its status, the iteration bar result, the CV scores,
+    and where it ran. result is the experiment_result.json the experimenter wrote, or a dict with a status."""
     e = _open_entry(spec)
     if not e:
         return {"ok": False, "problems": ["No iteration is open."]}
+    x = _experiment(e, exp_id)
+    if x is None:
+        return {"ok": False, "problems": [f"The open iteration has no experiment {exp_id!r}."]}
+    status = result.get("status")
+    if status is None:
+        bar = (result.get("bar") or {}).get("status")
+        status = "passed" if bar == "pass" else ("error" if result.get("problems") and not bar else "failed")
+    if status not in EXPERIMENT_STATUS:
+        return {"ok": False, "problems": [f"status must be one of {', '.join(EXPERIMENT_STATUS)}"]}
+    x.update({"status": status, "recorded_at": _now()})
+    for k in ("bar", "champion", "cv", "v1_cv", "workspace", "branch", "mlflow_parent_run", "problems", "summary"):
+        if result.get(k) is not None:
+            x[k] = result[k]
+    ml_common.log(spec, SKILL, f"recorded experiment {x.get('experiment') or exp_id}: {status}")
+    ml_common.save(spec_path, spec)
+    return {"ok": True, "experiment": x}
+
+
+def close_iteration(spec, root, spec_path, outcome, reason, do_restore=False, dry_run=False, adopted=None,
+                    none_passed=False):
+    e = _open_entry(spec)
+    if not e:
+        return {"ok": False, "problems": ["No iteration is open."]}
+    if adopted is not None or none_passed:
+        if not e.get("experiments"):
+            return {"ok": False, "problems": ["--adopted and --none-passed close a round, and this iteration has no "
+                                              "experiments."]}
+        if adopted is not None and (outcome != "kept" or _experiment(e, adopted) is None):
+            return {"ok": False, "problems": [f"--adopted needs --outcome kept and an experiment of this round "
+                                              f"({', '.join(str(x['id']) for x in e['experiments'])})."]}
+        if none_passed and outcome != "rolled_back":
+            return {"ok": False, "problems": ["--none-passed needs --outcome rolled_back."]}
+        do_restore = do_restore or none_passed   # nothing to restore: the project never changed
     if outcome not in OUTCOMES:
         return {"ok": False, "problems": [f"outcome must be one of {', '.join(OUTCOMES)}"]}
     if not str(reason or "").strip():
@@ -691,6 +764,21 @@ def close_iteration(spec, root, spec_path, outcome, reason, do_restore=False, dr
     if end.get("test") is not None and end["test_look"] <= e["start"].get("test_look", 0):
         end["test"] = None   # the evaluation shown is from before the iteration
     bar = bar_result(spec, root, e)
+    if adopted is not None:
+        x = _experiment(e, adopted)
+        x["status"] = "adopted"
+        e["adopted"] = x.get("experiment")
+        bar = {**(x.get("bar") or {}), **{k: v for k, v in bar.items() if v is not None and k != "status"},
+               "status": (x.get("bar") or {}).get("status") or bar.get("status")}
+    elif none_passed:
+        best = [x for x in e["experiments"] if (x.get("bar") or {}).get("status")]
+        bar = {"status": "fail" if best else "incomplete",
+               "detail": "No experiment of the round passed the iteration bar: " + "; ".join(
+                   f"{x.get('experiment') or x['id']} {(x.get('bar') or {}).get('status', x.get('status'))}"
+                   for x in e["experiments"])}
+    for x in e.get("experiments") or []:
+        if x.get("status") in ("planned", "running", "passed", "failed", "error") and x.get("id") != adopted:
+            x["status"] = "discarded" if x.get("status") in ("passed", "failed") else x["status"]
     closed = {**e, "status": "closed", "closed_at": _now(), "outcome": outcome, "reason": reason.strip(), "end": end,
               "not_rerun": left, "bar_result": {k: bar.get(k) for k in ("status", "wins", "folds", "mean_diff", "spread",
                                                                          "detail")}}
@@ -701,7 +789,7 @@ def close_iteration(spec, root, spec_path, outcome, reason, do_restore=False, dr
     it["current"] = None
     backup, manifest = None, None
     version_state = _version(spec)
-    if outcome == "rolled_back":
+    if outcome == "rolled_back" and not none_passed:
         stamp = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
         backup = os.path.join(root, ".iterate_backup", stamp)
         snapshot(spec, root, spec_path, backup)
@@ -710,7 +798,7 @@ def close_iteration(spec, root, spec_path, outcome, reason, do_restore=False, dr
     _decision(spec, f"Closed iteration {e['id']} ({e.get('version', '')}): {outcome.replace('_', ' ')}.", reason.strip())
     ml_common.log(spec, SKILL, f"closed iteration {e['id']} ({outcome})")
     ml_common.save(spec_path, spec)
-    notes, ver = _settle_version(spec, root, spec_path, closed, outcome, reason.strip())
+    notes, ver = _settle_version(spec, root, spec_path, closed, outcome, reason.strip(), adopted=e.get("adopted"))
     ml_common.save(spec_path, spec)
     notes += _settle_git(spec, root, spec_path, closed, outcome, ver, (manifest or {}).get("copied"))
     return {"ok": True, "entry": closed, "backup": ml_common.relpath(backup, root) if backup else None,
@@ -729,14 +817,19 @@ def record_carry(spec, spec_path, cf):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("command", choices=["diagnose", "open", "remaining", "carry-forward", "compare", "bar", "close"])
-    ap.add_argument("plan", nargs="?", help="open: the plan file")
+    ap.add_argument("command", choices=["diagnose", "open", "remaining", "carry-forward", "compare", "bar", "close",
+                                        "record-experiment"])
+    ap.add_argument("plan", nargs="?", help="open: the plan file; record-experiment: the experiment id")
     ap.add_argument("--spec", help="Spec path (default: ml_spec.yaml at the project root)")
     ap.add_argument("--json", action="store_true", help="Print the result as JSON")
     ap.add_argument("--dry-run", action="store_true", help="open, close: show what would happen without changing anything")
     ap.add_argument("--outcome", choices=OUTCOMES, help="close: kept, rolled_back, or stopped")
     ap.add_argument("--reason", help="close: why")
     ap.add_argument("--restore", action="store_true", help="close --outcome rolled_back: restore the snapshot")
+    ap.add_argument("--adopted", help="close a round: the id of the experiment adopted into the project")
+    ap.add_argument("--none-passed", action="store_true", help="close a round where no experiment passed the bar")
+    ap.add_argument("--result", help="record-experiment: the experiment_result.json file")
+    ap.add_argument("--status", choices=EXPERIMENT_STATUS, help="record-experiment: set the status directly")
     a = ap.parse_args()
     spec_path = ml_common.spec_path(a.spec)
     if not os.path.exists(spec_path):
@@ -832,10 +925,28 @@ def main():
                  f"(at least {res['bar']['min_folds']} folds). Edit it under iterations.bar in the spec."]
         _say(res, a.json, lines)
 
+    elif a.command == "record-experiment":
+        if not a.plan or not (a.result or a.status):
+            ap.error("record-experiment needs the experiment id and --result or --status")
+        result = {}
+        if a.result:
+            with open(a.result, encoding="utf-8") as f:
+                result = json.load(f)
+        if a.status:
+            result["status"] = a.status
+        res = record_experiment(spec, spec_path, a.plan, result)
+        if not res["ok"]:
+            print("Nothing was changed. " + " ".join(res["problems"]))
+            sys.exit(1)
+        x = res["experiment"]
+        _say(res, a.json, [f"Experiment {x.get('experiment') or x['id']}: {x['status']}. "
+                           f"Iteration bar: {(x.get('bar') or {}).get('status')}. {(x.get('bar') or {}).get('detail') or ''}"])
+
     else:
         if not a.outcome or not a.reason:
             ap.error("close needs --outcome and --reason")
-        res = close_iteration(spec, root, spec_path, a.outcome, a.reason, do_restore=a.restore, dry_run=a.dry_run)
+        res = close_iteration(spec, root, spec_path, a.outcome, a.reason, do_restore=a.restore, dry_run=a.dry_run,
+                              adopted=a.adopted, none_passed=a.none_passed)
         if not res["ok"]:
             print("Nothing was changed. " + " ".join(res["problems"]))
             sys.exit(1)
@@ -853,6 +964,9 @@ def main():
                   "/ml-status will flag it.")
         if e.get("not_rerun"):
             print("Not rerun in this iteration: " + ", ".join(e["not_rerun"]) + ".")
+        for x in e.get("experiments") or []:
+            print(f"Experiment {x.get('experiment') or x['id']}: {x.get('status')}, bar "
+                  f"{(x.get('bar') or {}).get('status')}")
         if res.get("backup"):
             print(f"Restored {e['snapshot']}/. The state before the rollback is in {res['backup']}/. The split and "
                   "feature tables were not in the snapshot: rerun the split and features notebooks to rebuild them.")
