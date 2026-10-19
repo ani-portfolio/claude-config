@@ -13,9 +13,10 @@ stages), it:
 4. with --iterate (the first fixture only, unless --iterate-all), opens V2, carries the V1 champion forward, reruns
    training and evaluation, closes it as kept, and checks that the iteration bar was applied; then opens V3 and rolls
    it back, and checks the branches, tags, aliases, and current runs.
-5. with --autopilot (the first fixture only), runs one ml-autopilot round of two experiments the way the agents
-   would, each in its own git worktree, adopts the one that passed the iteration bar and discards the other, and
-   checks the worktrees, branches, MLflow candidates, verdicts and aliases, and the spec;
+5. with --autopilot (the first fixture only), runs one ml-autopilot round the way the agents would: two screen
+   experiments, each in its own git worktree, both counted as passed, then the combination of the two added during
+   the round and trained in a third worktree; it advances the round until it settles, adopts what it settled on and
+   discards the rest, and checks the worktrees, branches, MLflow candidates, verdicts and aliases, and the spec;
 6. for an exploratory fixture (business.mode exploratory), checks that the model card frames the result by the
    learning question.
 
@@ -337,7 +338,7 @@ def run_autopilot(c, root, spec_path, env):
     after = (s2.get("split") or {}).get("strategy"), ((s2.get("split") or {}).get("cv") or {}).get("n_folds")
     c.check(res.get("exit_code") == 0 and after == before, "answers: the kept split answers rebuild the same split",
             f"{before} -> {after}, exit {res.get('exit_code')}")
-    code, _ = run(ap_ + ["start", "--experiments-per-round", "2", "--max-rounds", "1"])
+    code, _ = run(ap_ + ["start", "--max-parallel", "2"])
     c.check(code == 0, "autopilot: settings recorded")
     code, nxt = run(ap_ + ["next"])
     c.check(nxt.get("action") == "open_round", "autopilot: after the evaluation, the next action is a round", str(nxt))
@@ -362,12 +363,17 @@ def run_autopilot(c, root, spec_path, env):
             c.check(client.get_run(x["parent_run"]).data.tags.get("mlflow.parentRunId") == x.get("version_parent_run"),
                     f"{x['experiment']}: parent run sits under the V2 run")
 
-    # The agents: carry forward, train with the experiment's change, apply the bar, write the result
+    # The agents: carry forward, train with the experiment's changes, apply the bar, write the result
     base_answers = ml_common.load(os.path.join(kept, "training.yaml"))
     variants = {"a": [dict(m, tuning={**m["tuning"], "n_trials": 20}) for m in base_answers["models"] if m["type"] == "lightgbm"],
                 "b": [dict(m, tuning={**m["tuning"], "n_trials": 2}) for m in base_answers["models"] if m["type"] == "ridge"]}
-    for i, x in exps.items():
+    variants["comb"] = variants["a"] + variants["b"]
+
+    def agent(i, x):
         ws = x["workspace"]
+        info = json.load(open(os.path.join(ws, ".ml_workspace.json")))
+        c.check(info.get("phase") == ("combine" if i == "comb" else "screen"), f"{x['experiment']}: workspace knows its phase",
+                str(info.get("phase")))
         code, cf = run(it + ["carry-forward", "--json"], cwd=ws)
         c.check(code == 0, f"{x['experiment']}: champion carried forward in the workspace", str(cf)[:300])
         ans = {**base_answers, "models": variants[i] + ([cf["model"]] if code == 0 else [])}
@@ -377,6 +383,8 @@ def run_autopilot(c, root, spec_path, env):
         c.check(res.get("exit_code") == 0, f"{x['experiment']}: training in the workspace, exit code 0",
                 res.get("stderr_tail", "")[-400:])
         _, bar = run(it + ["bar", "--json"], cwd=ws)
+        c.check(bool(bar.get("per_fold")) and bool(bar.get("champion_model")),
+                f"{x['experiment']}: the bar reports per fold scores and the champion's settings", str(bar)[:300])
         ws_spec = ml_common.load(os.path.join(ws, ml_common.SPEC_NAME))
         rid = ((ws_spec.get("training") or {}).get("mlflow") or {}).get("run_id")
         if rid:
@@ -389,6 +397,9 @@ def run_autopilot(c, root, spec_path, env):
                        "summary": "regression"}, f)
         exps[i]["training_run"] = rid
         exps[i]["bar_status"] = bar.get("status")
+
+    for i, x in exps.items():
+        agent(i, x)
     c.check(client.get_model_version_by_alias(name, "champion").version == v1_version,
             "round: alias champion has not moved while the experiments ran")
     res = run_stage(root, env, "ml-model-training", os.path.join(kept, "training.yaml"), ["--rebuild", "--overwrite"])
@@ -400,28 +411,53 @@ def run_autopilot(c, root, spec_path, env):
     for i, x in exps.items():
         code, out = run(it + ["record-experiment", i, "--result", os.path.join(x["workspace"], "experiment_result.json"), "--json"])
         c.check(code == 0, f"{x['experiment']}: result recorded in the project", str(out)[:300])
-    passed = [i for i, x in exps.items() if x.get("bar_status") == "pass"]
     print("  bar results: " + ", ".join(f"{x['experiment']} {x.get('bar_status')}" for x in exps.values()))
-    if not passed:   # the plumbing is under test here, not the models: let a count as passed
-        print("  neither experiment passed the bar; recording V2-a as passed to test the adoption")
-        run(it + ["record-experiment", "a", "--status", "passed", "--json"])
-        passed = ["a"]
-    win = sorted(passed)[0] if len(passed) == 1 else None
+    for i in exps:   # the plumbing is under test here, not the models: count both as passed, so they are combined
+        if exps[i].get("bar_status") != "pass":
+            run(it + ["record-experiment", i, "--status", "passed", "--json"])
     code, nxt = run(ap_ + ["next"])
-    c.check(nxt.get("action") == "close_round", "round: every experiment reported, so the next action is to close", str(nxt))
+    c.check(nxt.get("action") == "advance_round", "round: every screen experiment reported, so the next action is to advance", str(nxt))
+    code, adv = run(ap_ + ["round", "advance", "--scratch", kept])
+    c.check(code == 0 and adv.get("phase") == "combine" and adv.get("added") == ["comb"] and len(adv.get("experiments") or []) == 1,
+            "advance: both passed, so the combination is added with its own workspace", str(adv)[:600])
+    if code or not adv.get("experiments"):
+        return
+    exps["comb"] = adv["experiments"][0]
+    c.check(sorted(json.load(open(os.path.join(exps["comb"]["workspace"], ".ml_workspace.json"))).get("refs") or [])
+            == sorted([exps["a"]["branch"], exps["b"]["branch"]]), "comb: the workspace names the branches it combines")
+    agent("comb", exps["comb"])
+    code, out = run(it + ["record-experiment", "comb", "--result", os.path.join(exps["comb"]["workspace"], "experiment_result.json"), "--json"])
+    c.check(code == 0, "comb: result recorded in the project", str(out)[:300])
+    print(f"  combination: {exps['comb'].get('bar_status')}")
+    if exps["comb"].get("bar_status") != "pass":   # keep to the ablation path; greedy is covered by the unit tests
+        run(it + ["record-experiment", "comb", "--status", "passed", "--json"])
+    log = []
+    for _ in range(4):   # ablations of a pair reuse the screen results, so no new experiment runs
+        code, nxt = run(ap_ + ["next"])
+        if nxt.get("action") != "advance_round":
+            break
+        code, adv = run(ap_ + ["round", "advance", "--scratch", kept])
+        c.check(code == 0 and not adv.get("added"), "advance: no new experiment is needed", str(adv)[:600])
+        log = adv.get("log") or log
+    print("  round log: " + " | ".join(log))
+    c.check(nxt.get("action") == "close_round", "round: settled, so the next action is to close", str(nxt))
     code, closed = run(ap_ + ["round", "close"])
     c.check(code == 0, "round: closed", str(closed)[:600])
     if code:
         return
-    win = win or closed.get("adopted", "").split("-")[-1].lower()
-    lose = "b" if win == "a" else "a"
-    W, L = exps[win], exps[lose]
+    if not closed.get("adopted"):   # the combination failed the bar and greedy kept nothing: the rollback is checked
+        c.check(ml_common.load(spec_path)["iterations"]["entries"][-1].get("outcome") == "rolled_back",
+                "round: settled on nothing, so it is rolled back")
+        return
+    win = closed["adopted"].split("-")[-1].lower()
+    lose = [i for i in exps if i != win]
+    W, L = exps[win], exps[lose[0]]
     spec = ml_common.load(spec_path)
     entry = spec["iterations"]["entries"][-1]
     c.check(entry.get("status") == "closed" and entry.get("outcome") == "kept" and entry.get("adopted") == W["experiment"],
             "round: the iteration is closed as kept with the adopted experiment", str({k: entry.get(k) for k in ("status", "outcome", "adopted")}))
     st = {x["id"]: x.get("status") for x in entry.get("experiments") or []}
-    c.check(st.get(win) == "adopted" and st.get(lose) == "discarded", "round: experiment statuses adopted and discarded", str(st))
+    c.check(st.get(win) == "adopted" and all(st.get(i) == "discarded" for i in lose), "round: experiment statuses adopted and discarded", str(st))
     c.check(spec["training"]["mlflow"]["run_id"] == W["training_run"], "adopt: the project's training section is the adopted experiment's")
     c.check(client.get_run(W["training_run"]).data.tags.get("current") == "true", "adopt: the adopted training run is current")
     c.check(client.get_run(v1_training_run).data.tags.get("current") == "false", "adopt: the V1 training run is no longer current")
@@ -430,7 +466,9 @@ def run_autopilot(c, root, spec_path, env):
     c.check(bool(client.search_runs([exp_id], f"tags.experiment = '{L['experiment']}' and tags.run_type = 'stage'")),
             "discard: the rejected experiment's runs stay in MLflow")
     champ = client.get_model_version_by_alias(name, "champion")
-    c.check(champ.version != v1_version and champ.tags.get("experiment") in (W["experiment"], None),
+    # A combination whose champion is the same training run as a screen experiment's reuses that registered version
+    allowed = {W["experiment"], None} | ({exps[i]["experiment"] for i in ("a", "b")} if win == "comb" else set())
+    c.check(champ.version != v1_version and champ.tags.get("experiment") in allowed,
             "adopt: alias champion moved to the adopted experiment's model", f"{champ.version} {champ.tags}")
     try:
         c.check(client.get_model_version_by_alias(name, "champion-v2").version == champ.version,
@@ -439,14 +477,18 @@ def run_autopilot(c, root, spec_path, env):
         c.check(False, "adopt: alias champion-v2 names the adopted model", str(e)[:200])
     champ_path = os.path.join(root, (spec["training"].get("champion") or {}).get("path") or "missing")
     c.check(os.path.exists(champ_path), "adopt: the adopted champion's model file is in the project")
-    c.check(not os.path.exists(W["workspace"]) and not os.path.exists(L["workspace"]), "the worktrees are removed")
-    c.check(bool(git(root, "branch", "--list", W["branch"]).stdout.strip()) and bool(git(root, "branch", "--list", L["branch"]).stdout.strip()),
-            "both experiment branches are kept")
+    c.check(not any(os.path.exists(x["workspace"]) for x in exps.values()), "the worktrees are removed")
+    c.check(all(git(root, "branch", "--list", x["branch"]).stdout.strip() for x in exps.values()),
+            "every experiment branch is kept")
     c.check(f"Adopt {W['experiment']}" in git(root, "log", "--format=%s", "-20").stdout, "adopt: merge commit on ml/v2")
     bl = {b["id"]: b["status"] for b in spec["autopilot"]["backlog"]}
-    c.check(sorted(bl.values()) == ["adopted", "tried"], "the backlog records adopted and tried", str(bl))
+    c.check(sorted(bl.values()) == (["adopted", "adopted"] if win == "comb" else ["adopted", "tried"]),
+            "the backlog records what was adopted and tried", str(bl))
     c.check(git(root, "rev-list", "--count", "main").stdout.strip() == "1", "autopilot: main still holds only the first commit")
     c.check(not git(root, "status", "--porcelain", "--", "ml_spec.yaml").stdout.strip(), "autopilot: the spec is committed")
+    code, nxt = run(ap_ + ["next"])
+    c.check(nxt.get("action") == "open_round", "autopilot: a kept round allows another round", str(nxt))
+    code, _ = run(ap_ + ["stop", "--reason", "regression: one round is enough"])
     code, nxt = run(ap_ + ["next"])
     c.check(nxt.get("action") == "checkpoint" and nxt.get("checkpoint") == "test_final",
             "autopilot: after the last round, it stops before the final test look", str(nxt))

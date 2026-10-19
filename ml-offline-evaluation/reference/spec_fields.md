@@ -351,7 +351,6 @@ Opening and closing an iteration also add an entry to `decisions` with stage `it
 | `spread_multiple` | 1.0 | Its mean improvement must be larger than this many standard deviations of the per fold differences. |
 | `min_folds` | 3 | With fewer paired folds, the bar is `incomplete`, never `fail`. |
 | `max_iterations` | 3 | Iterating without a person stops after this many rounds. Enforced by ml-autopilot, not by ml-iterate. |
-| `max_consecutive_fails` | 2 | Iterating without a person stops after this many rounds in a row where nothing was adopted. Also enforced by ml-autopilot. |
 
 Each record in a round's `experiments`:
 
@@ -359,10 +358,15 @@ Each record in a round's `experiments`:
 |---|---|
 | `id` | A short id within the round: `a`, `b`, ... |
 | `experiment` | Its name in MLflow and git: `<version>-<id>` (`V2-a`). Its branch is `exp/v2-a` and its worktree `.worktrees/v2-a`. |
-| `hypothesis`, `changes`, `rerun` | One change, why, and the stages it reruns. The rerun never includes evaluation: an experiment is judged on CV. |
-| `backlog` | The id of the `autopilot.backlog` item it came from. |
+| `hypothesis`, `changes`, `rerun` | Its changes (one in the screen phase), why, and the stages it reruns. The rerun never includes evaluation: an experiment is judged on CV. |
+| `backlog` | The id of the `autopilot.backlog` item it came from, or a list of ids when it combines several. |
+| `phase` | The phase of the round it belongs to: `screen`, `combine`, `ablate`, `verify`, or `greedy`. |
+| `compare_to` | The experiment it is judged against (an ablation against the combination, a greedy step against the set before it). Absent: the champion carried forward. |
+| `frozen_model` | An ablation only: the combination's model with its tuned settings, trained without tuning. |
+| `refs` | The branches of the screen experiments whose changes it makes. |
+| `candidate` | The model it is judged by: the new champion, or the frozen model of an ablation. |
 | `status` | `planned`, `running`, then `passed`, `failed` (the bar failed or was incomplete), or `error` (the agent stopped), and at close `adopted` or `discarded`. |
-| `bar`, `champion`, `cv`, `v1_cv`, `problems`, `summary` | What the experiment reported in its `experiment_result.json`. |
+| `bar`, `champion`, `cv`, `v1_cv`, `problems`, `summary` | What the experiment reported in its `experiment_result.json`. `bar.per_fold` has the per fold CV scores of every model it trained, and `bar.champion_model` its champion with the tuned settings. |
 | `workspace`, `branch`, `mlflow_parent_run` | Where it ran, and its MLflow parent run (a child of the version's run). |
 
 ## autopilot
@@ -371,10 +375,11 @@ Written only by ml-autopilot. Absent in projects no agent has driven.
 
 | Field | Meaning |
 |---|---|
-| `settings` | `experiments_per_round` (2), `max_rounds` (3), and `unattended`, agreed with the person at the start of the run (`ml_common.AUTOPILOT_DEFAULTS`). |
+| `settings` | `max_parallel` (3, at most 5: experiments that run at once) and `unattended`, agreed with the person at the start of the run (`ml_common.AUTOPILOT_DEFAULTS`). Older specs with `experiments_per_round` and `max_rounds` are brought up to date when read. |
 | `started_at` | When the run started. |
 | `checkpoints` | Each stop for the person: `kind` (`business`, `framing`, `test_v1`, `test_final`), `status` (`open` or `cleared`), `opened_at`, `cleared_at`, `file` (`docs/checkpoint.md`), and a `note`. |
-| `backlog` | Candidate experiments, one change each: `id` (`B1`), `stage`, `change`, `hypothesis`, `cost` (1 to 3), `status` (`open`, `in_round`, `tried`, `adopted`), `round`, and `result`. |
+| `backlog` | Candidate experiments, one change each: `id` (`B1`), `stage`, `change`, `hypothesis`, `cost` (1 to 3), `status` (`open`, `in_round`, `tried`, `adopted`), `round`, and `result` (the screen experiment, its bar result, and a `note` on why it was adopted or not). |
+| `rounds` | One record per round: `iteration`, `version`, `phase`, `status`, `passers` (screen experiments that passed, best first), `combo`, `ablations` and `ablation_verdicts`, `dropped`, `verify`, `greedy` (`order`, `set`, `current`), `discarded`, `decided`, `final` (the experiment adopted, or none), and `log` (one sentence per step). |
 | `stopped` | `at` and `reason` when iterating was stopped early. |
 
 ## The workspace file

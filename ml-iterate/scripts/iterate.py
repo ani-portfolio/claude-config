@@ -17,6 +17,7 @@ Commands (run from the project root with the project's Python):
     iterate.py bar [--json]                # the iteration bar: does the new champion really beat the carried one?
     iterate.py close --outcome kept|rolled_back|stopped --reason "..." [--restore] [--dry-run]
     iterate.py record-experiment <id> --result result.json   # a round's experiment: its bar result and verdict
+    iterate.py add-experiments plan.yaml   # a round's later experiments: a combination of changes, its ablations
     iterate.py close --outcome kept --adopted <id> --reason "..."     # a round: the experiment adopted into the project
     iterate.py close --outcome rolled_back --none-passed --reason "..."   # a round where no experiment passed
 
@@ -27,14 +28,17 @@ plan.yaml:
       - {stage: split, change: "Two expanding folds of 26 weeks instead of three of 13."}
       - {stage: features, change: "Add a post COVID slope and a third Fourier pair."}
 
-A round (ml-autopilot): the plan lists experiments instead of one set of changes. Each experiment is one change,
-run by an agent in its own git worktree (ml-autopilot's workspace.py) and logged to MLflow as the experiment
-<version>-<id> (V2-a, V2-b). The project itself does not change until the best experiment that passes the iteration
-bar is adopted; when none passes, the round closes as rolled back with nothing to restore.
+A round (ml-autopilot): the plan lists experiments instead of one set of changes. Each experiment is run by an
+agent in its own git worktree (ml-autopilot's workspace.py) and logged to MLflow as the experiment <version>-<id>
+(V2-a, V2-b). The round screens one change per experiment first; ml-autopilot then adds experiments that combine the
+changes that passed and take each one out again. The project itself does not change until one experiment is adopted;
+when none passes, the round closes as rolled back with nothing to restore.
     hypothesis: What the round tries, in one sentence.
     experiments:
-      - {id: a, hypothesis: "...", changes: [{stage: features, change: "..."}]}
-      - {id: b, hypothesis: "...", changes: [{stage: split, change: "..."}]}
+      - {id: a, hypothesis: "...", changes: [{stage: features, change: "..."}], phase: screen}
+      - {id: b, hypothesis: "...", changes: [{stage: training, change: "..."}], phase: screen}
+An experiment may also name the experiment it is compared with (compare_to), a model to train with its settings
+fixed (frozen_model), and the branches whose changes it combines (refs).
 """
 
 from __future__ import annotations
@@ -432,13 +436,20 @@ def bar_result(spec, root, entry=None):
     return out
 
 
+def bar_report(spec, root):
+    """The bar of the open iteration, with what a driver needs to compare experiments with each other: the per fold
+    CV scores of every model in this training run, and the champion as a model entry with its tuned settings."""
+    res = bar_result(spec, root)
+    res["bar"] = ml_common.iteration_bar(spec)
+    res["per_fold"], _ = best_trial_folds(spec, root)
+    champ = (spec.get("training") or {}).get("champion") or {}
+    if champ.get("name"):
+        res["champion_model"] = _model_entry(champ, champ["name"], "The champion of this training run.")
+    return res
+
+
 def _lower_better(tr):
-    import importlib.util
-    key = str(tr.get("primary_label") or "").split("@")[0]
-    if importlib.util.find_spec("model_core"):
-        import model_core
-        return model_core.HIGHER_IS_BETTER.get(key) is False
-    return key in ("rmse", "mae", "mape", "wape", "log_loss", "brier")
+    return ml_common.lower_is_better(tr)
 
 
 def _mentions_season(spec):
@@ -532,6 +543,61 @@ def restore(root, src_dir, keep_iterations):
 
 # ---------------------------------------------------------------- open, remaining, carry forward, compare, close
 
+# What a driver may set on an experiment besides its changes: the phase of the round it belongs to, the experiment
+# it is compared with (none: the carried champion), a model to train with its settings fixed, and the branches of
+# earlier experiments whose changes it combines.
+EXPERIMENT_EXTRAS = ("phase", "compare_to", "frozen_model", "refs")
+
+
+def _experiment_problems(experiments, taken=()):
+    problems = []
+    ids = [str(x.get("id") or "") for x in experiments]
+    if any(not i or not i.replace("_", "").isalnum() for i in ids) or len(set(ids)) != len(ids) \
+            or set(ids) & set(taken):
+        problems.append("Every experiment needs a short id of its own, in letters and digits (a, b, c).")
+    for x in experiments:
+        if not str(x.get("hypothesis") or "").strip() or not x.get("changes"):
+            problems.append(f"Experiment {x.get('id')} needs a hypothesis and at least one change.")
+        for c in x.get("changes") or []:
+            if c.get("stage") not in CHAIN + ["setup", "business", "discovery"]:
+                problems.append(f"Unknown stage {c.get('stage')!r} in experiment {x.get('id')}.")
+    return problems
+
+
+def _experiment_record(x):
+    rec = {"id": str(x["id"]), "hypothesis": str(x["hypothesis"]).strip(), "changes": x["changes"],
+           # an experiment never opens the test set: it is judged on CV
+           "rerun": [st for st in _rerun_order(x["changes"]) if st != "evaluation"],
+           "status": "planned", "backlog": x.get("backlog")}
+    rec.update({k: x[k] for k in EXPERIMENT_EXTRAS if x.get(k) is not None})
+    return rec
+
+
+def add_experiments(spec, spec_path, experiments):
+    """Add experiments to the open round, for the later phases of a round (a combination, its ablations)."""
+    e = _open_entry(spec)
+    if not e or not e.get("experiments"):
+        return {"ok": False, "problems": ["No round is open."]}
+    problems = _experiment_problems(experiments or [], [x["id"] for x in e["experiments"]])
+    if not experiments:
+        problems.append("The plan lists no experiments.")
+    if problems:
+        return {"ok": False, "problems": problems}
+    added = []
+    for x in experiments:
+        rec = _experiment_record(x)
+        rec["experiment"] = f"{e['version']}-{rec['id']}"
+        e["experiments"].append(rec)
+        added.append(rec)
+        for c in rec["changes"]:
+            if c not in e["changes"]:
+                e["changes"].append(c)
+    e["rerun"] = _rerun_order(e["changes"])
+    ml_common.log(spec, SKILL, "added experiments " + ", ".join(x["experiment"] for x in added) + f" to iteration {e['id']}")
+    ml_common.save(spec_path, spec)
+    return {"ok": True, "experiments": added}
+
+
 def open_iteration(spec, root, spec_path, plan, dry_run=False):
     it = _iters(spec)
     problems = []
@@ -545,12 +611,7 @@ def open_iteration(spec, root, spec_path, plan, dry_run=False):
     changes = plan.get("changes") or []
     if experiments and not changes:   # a round: its changes are those of its experiments
         changes = [c for x in experiments for c in (x.get("changes") or [])]
-    ids = [str(x.get("id") or "") for x in experiments]
-    if any(not i or not i.replace("_", "").isalnum() for i in ids) or len(set(ids)) != len(ids):
-        problems.append("Every experiment needs a short id of its own, in letters and digits (a, b, c).")
-    for x in experiments:
-        if not str(x.get("hypothesis") or "").strip() or not x.get("changes"):
-            problems.append(f"Experiment {x.get('id')} needs a hypothesis and at least one change.")
+    problems += _experiment_problems(experiments)
     if not changes:
         problems.append("The plan lists no changes.")
     for c in changes:
@@ -573,11 +634,7 @@ def open_iteration(spec, root, spec_path, plan, dry_run=False):
                                                                          "custom_features.py")),
                               "split_cv": _hash_obj(((spec.get("split") or {}).get("cv") or {}).get("folds"))}}
     if experiments:
-        entry["experiments"] = [{"id": str(x["id"]), "hypothesis": str(x["hypothesis"]).strip(),
-                                 "changes": x["changes"],
-                                 # an experiment never opens the test set: it is judged on CV
-                                 "rerun": [st for st in _rerun_order(x["changes"]) if st != "evaluation"],
-                                 "status": "planned", "backlog": x.get("backlog")} for x in experiments]
+        entry["experiments"] = [_experiment_record(x) for x in experiments]
     if dry_run:
         return {"ok": True, "dry_run": True, "entry": entry, "files": _snapshot_files(spec, root, spec_path)}
     copied, skipped = snapshot(spec, root, spec_path, dest)
@@ -621,6 +678,15 @@ def remaining(spec):
     return e, left
 
 
+def _model_entry(champ, name, reason):
+    """A champion as a model for the training answers, with its tuned settings fixed (tuning none)."""
+    model = {"name": name, "type": champ.get("type"), "params": dict(champ.get("params") or {}),
+             "class_weight": champ.get("class_weight"), "tuning": "none", "reason": reason}
+    if champ.get("inputs"):
+        model["inputs"] = list(champ["inputs"])
+    return model
+
+
 def carry_forward(spec, root):
     """The previous champion as a model entry for the training answers, with its tuned settings fixed."""
     e = _open_entry(spec)
@@ -631,13 +697,9 @@ def carry_forward(spec, root):
     champ = (old.get("training") or {}).get("champion") or {}
     if not champ.get("name"):
         return {"ok": False, "problems": ["The snapshot has no champion to carry forward."]}
-    model = {"name": f"{champ['name']}_iter{e['id'] - 1}", "type": champ.get("type"),
-             "params": dict(champ.get("params") or {}), "class_weight": champ.get("class_weight"),
-             "tuning": "none",
-             "reason": f"The champion of iteration {e['id'] - 1}, carried forward with its tuned settings fixed, so it "
-                       "is scored on the same folds and features as the new models."}
-    if champ.get("inputs"):
-        model["inputs"] = list(champ["inputs"])
+    model = _model_entry(champ, f"{champ['name']}_iter{e['id'] - 1}",
+                         f"The champion of iteration {e['id'] - 1}, carried forward with its tuned settings fixed, so "
+                         "it is scored on the same folds and features as the new models.")
     # Which columns does it need, and do they still exist?
     needed = set(model.get("inputs") or [])
     for v in model["params"].values():
@@ -725,7 +787,8 @@ def record_experiment(spec, spec_path, exp_id, result):
     if status not in EXPERIMENT_STATUS:
         return {"ok": False, "problems": [f"status must be one of {', '.join(EXPERIMENT_STATUS)}"]}
     x.update({"status": status, "recorded_at": _now()})
-    for k in ("bar", "champion", "cv", "v1_cv", "workspace", "branch", "mlflow_parent_run", "problems", "summary"):
+    for k in ("bar", "champion", "candidate", "cv", "v1_cv", "workspace", "branch", "mlflow_parent_run", "problems",
+              "summary"):
         if result.get(k) is not None:
             x[k] = result[k]
     ml_common.log(spec, SKILL, f"recorded experiment {x.get('experiment') or exp_id}: {status}")
@@ -818,8 +881,8 @@ def record_carry(spec, spec_path, cf):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("command", choices=["diagnose", "open", "remaining", "carry-forward", "compare", "bar", "close",
-                                        "record-experiment"])
-    ap.add_argument("plan", nargs="?", help="open: the plan file; record-experiment: the experiment id")
+                                        "record-experiment", "add-experiments"])
+    ap.add_argument("plan", nargs="?", help="open, add-experiments: the plan file; record-experiment: the experiment id")
     ap.add_argument("--spec", help="Spec path (default: ml_spec.yaml at the project root)")
     ap.add_argument("--json", action="store_true", help="Print the result as JSON")
     ap.add_argument("--dry-run", action="store_true", help="open, close: show what would happen without changing anything")
@@ -917,13 +980,22 @@ def main():
             print("Test scores from the second look onwards are optimistic.")
 
     elif a.command == "bar":
-        res = bar_result(spec, root)
-        res["bar"] = ml_common.iteration_bar(spec)
+        res = bar_report(spec, root)
         lines = [f"Iteration bar: {res['status']}. {res['detail']}",
                  f"The bar: win on more than {res['bar']['min_fold_win_share']:.0%} of the folds, with a mean improvement "
                  f"larger than {res['bar']['spread_multiple']:g} times the spread of the per fold differences "
                  f"(at least {res['bar']['min_folds']} folds). Edit it under iterations.bar in the spec."]
         _say(res, a.json, lines)
+
+    elif a.command == "add-experiments":
+        if not a.plan:
+            ap.error("give the plan file")
+        plan = ml_common.load(a.plan)
+        res = add_experiments(spec, spec_path, plan.get("experiments") if isinstance(plan, dict) else plan)
+        if not res["ok"]:
+            print("Nothing was changed. Problems:\n" + "\n".join("  " + p for p in res["problems"]))
+            sys.exit(1)
+        _say(res, a.json, ["Added " + ", ".join(x["experiment"] for x in res["experiments"]) + "."])
 
     elif a.command == "record-experiment":
         if not a.plan or not (a.result or a.status):

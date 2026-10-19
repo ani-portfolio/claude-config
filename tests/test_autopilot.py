@@ -97,13 +97,20 @@ def test_evaluated_opens_a_round():
     assert a.next_action(_evaluated(_spec()))["action"] == "open_round"
 
 
-def test_round_waits_for_experiments_then_closes():
+def test_round_launches_waits_then_advances():
     s = _evaluated(_spec())
+    s["autopilot"]["settings"]["max_parallel"] = 2
     s["iterations"]["current"] = 1
-    s["iterations"]["entries"] = [{"id": 1, "status": "open", "experiments": [{"id": "a", "status": "running"},
-                                                                              {"id": "b", "status": "passed"}]}]
+    s["iterations"]["entries"] = [{"id": 1, "status": "open", "experiments": [
+        {"id": "a", "status": "running"}, {"id": "b", "status": "planned"}, {"id": "c", "status": "planned"}]}]
+    act = a.next_action(s)
+    assert act["action"] == "launch_experiments" and act["experiments"] == ["b"], act
+    s["iterations"]["entries"][0]["experiments"][1]["status"] = "running"
     assert a.next_action(s)["action"] == "await_experiments"
-    s["iterations"]["entries"][0]["experiments"][0]["status"] = "error"
+    for x in s["iterations"]["entries"][0]["experiments"]:
+        x["status"] = "passed"
+    assert a.next_action(s)["action"] == "advance_round"
+    s["autopilot"]["rounds"] = [{"iteration": 1, "decided": True, "log": ["settled"]}]
     assert a.next_action(s)["action"] == "close_round"
 
 
@@ -126,18 +133,20 @@ def test_limit_on_rounds():
     assert not lim["another_round"] and "3 of 3" in lim["reason"], lim
 
 
-def test_limit_on_failures_in_a_row():
-    s = _rounds(_evaluated(_spec()), ["rolled_back", "rolled_back"])
+def test_a_round_that_adopts_nothing_stops_when_the_backlog_is_empty():
+    s = _rounds(_evaluated(_spec()), ["rolled_back"])
     lim = a.limits(s)
-    assert not lim["another_round"] and lim["fails_in_a_row"] == 2, lim
-    s = _rounds(_evaluated(_spec()), ["rolled_back", "kept"])
-    assert a.limits(s)["another_round"]
+    assert not lim["another_round"] and "adopted nothing" in lim["reason"], lim
+    s["autopilot"]["backlog"] = [{"id": "B1", "stage": "features", "change": "x", "status": "open"}]
+    assert a.limits(s)["another_round"]   # an item upstream of the split had a round of its own: the rest wait
+    assert a.limits(_rounds(_evaluated(_spec()), ["kept"]))["another_round"]
 
 
-def test_max_rounds_setting_never_exceeds_the_bar():
-    s = _evaluated(_spec())
-    s["autopilot"]["settings"]["max_rounds"] = 10
-    assert a.limits(s)["max_rounds"] == m.ITERATION_BAR_DEFAULTS["max_iterations"]
+def test_old_settings_are_brought_up_to_date():
+    s = _spec()
+    s["autopilot"]["settings"] = {"experiments_per_round": 4, "max_rounds": 9, "unattended": True}
+    assert m.autopilot_settings(s) == {"max_parallel": 4, "unattended": True}
+    assert m.migrate(s)["autopilot"]["settings"] == {"max_parallel": 4, "unattended": True}
 
 
 def test_kept_round_needs_a_final_test_look():
@@ -161,15 +170,110 @@ def test_stop_ends_the_rounds():
     assert a.next_action(s)["action"] == "done"
 
 
-def test_pick_prefers_cheap_and_different_stages():
+def test_round_items_take_the_whole_backlog_or_one_upstream_item():
     s = _spec()
     s["autopilot"]["backlog"] = [
         {"id": "B1", "stage": "features", "change": "x", "cost": 2, "status": "open"},
         {"id": "B2", "stage": "features", "change": "y", "cost": 1, "status": "open"},
-        {"id": "B3", "stage": "split", "change": "z", "cost": 3, "status": "open"},
+        {"id": "B3", "stage": "training", "change": "z", "cost": 3, "status": "open"},
         {"id": "B4", "stage": "training", "change": "w", "cost": 1, "status": "tried"}]
-    assert [b["id"] for b in a._pick(s, 2)] == ["B2", "B3"]
-    assert [b["id"] for b in a._pick(s, 3)] == ["B2", "B3", "B1"]
+    assert [b["id"] for b in a._round_items(s)] == ["B2", "B1", "B3"]
+    s["autopilot"]["backlog"] += [{"id": "B5", "stage": "split", "change": "v", "cost": 2, "status": "open"},
+                                  {"id": "B6", "stage": "split", "change": "u", "cost": 1, "status": "open"}]
+    assert [b["id"] for b in a._round_items(s)] == ["B6"]
+
+
+# ---------------------------------------------------------------- the phases of a round
+
+GOOD, BASE = [0.80, 0.81, 0.82, 0.83], [0.70, 0.71, 0.72, 0.73]
+
+
+def _x(id_, status="passed", folds=None, phase="screen", stage="features", gain=None, carried=None):
+    """An experiment record as record-experiment leaves it: its bar against the carried champion, with per fold
+    scores of the model it is judged by and of the carried one."""
+    folds = folds or GOOD
+    carried = carried or BASE
+    d = sum(f - c for f, c in zip(folds, carried)) / len(folds)
+    return {"id": id_, "experiment": f"V2-{id_}", "status": status, "phase": phase, "hypothesis": f"h {id_}",
+            "changes": [{"stage": stage, "change": f"change {id_}"}], "backlog": f"B{id_}", "branch": f"exp/v2-{id_}",
+            "bar": {"status": "pass" if status == "passed" else "fail", "new": "m", "carried": "old",
+                    "mean_diff": gain if gain is not None else d, "per_fold": {"m": folds, "old": carried},
+                    "champion_model": {"name": "m", "type": "lightgbm", "params": {"n": 1}, "tuning": "none"}}}
+
+
+def _round(*xs):
+    s = _evaluated(_spec())
+    s["training"] = {"primary_label": "auc"}
+    entry = {"id": 1, "status": "open", "version": "V2", "experiments": list(xs)}
+    st = {"iteration": 1, "phase": "screen", "status": "open", "log": []}
+    return s, entry, st
+
+
+def _run(s, entry, st):
+    plans, problems = a._advance(s, entry, st)
+    while not plans and not problems and not st.get("decided"):
+        plans, problems = a._advance(s, entry, st)
+    assert not problems, problems
+    return plans
+
+
+def _report(entry, plans, results):
+    """Add the planned experiments to the round with their results, as the agents and record-experiment would."""
+    for p in plans:
+        entry["experiments"].append({**p, **results[p["id"]], "id": p["id"], "phase": p["phase"]})
+
+
+def test_screen_none_passes():
+    s, entry, st = _round(_x("a", "failed"), _x("b", "error"))
+    assert _run(s, entry, st) == [] and st["decided"] and st["final"] is None
+
+
+def test_screen_one_passes_is_adopted_alone():
+    s, entry, st = _round(_x("a"), _x("b", "failed"))
+    assert _run(s, entry, st) == [] and st["final"] == "a"
+
+
+def test_two_pass_combine_then_reuse_the_screen_for_ablation():
+    s, entry, st = _round(_x("a", gain=0.05), _x("b", gain=0.1))
+    plans = _run(s, entry, st)
+    assert [p["id"] for p in plans] == ["comb"] and st["passers"] == ["b", "a"], (plans, st)
+    assert {c["change"] for c in plans[0]["changes"]} == {"change a", "change b"}
+    assert sorted(plans[0]["backlog"]) == ["Ba", "Bb"] and sorted(plans[0]["refs"]) == ["exp/v2-a", "exp/v2-b"]
+    _report(entry, plans, {"comb": _x("comb", folds=[0.85, 0.86, 0.87, 0.88])})
+    assert _run(s, entry, st) == [] and st["final"] == "comb", st   # a and b alone are worse than together
+
+
+def test_ablation_drops_a_change_that_hurts_then_verifies():
+    s, entry, st = _round(_x("a", gain=0.1), _x("b", gain=0.08), _x("c", gain=0.05, stage="training"))
+    _report(entry, _run(s, entry, st), {"comb": _x("comb", folds=[0.85, 0.86, 0.87, 0.88])})
+    plans = _run(s, entry, st)
+    assert st["phase"] == "ablate" and [p["id"] for p in plans] == ["abl1", "abl2", "abl3"], plans
+    by = {p["id"]: p for p in plans}
+    # taking out a features change keeps the combination's tuned model fixed; taking out a training change cannot
+    assert by["abl1"]["frozen_model"]["name"] == "m" and "frozen_model" not in by["abl3"], by
+    assert all(p["compare_to"] == "comb" for p in plans)
+    assert {c["change"] for c in by["abl2"]["changes"]} == {"change a", "change c"}
+    _report(entry, plans, {"abl1": _x("abl1", folds=[0.75, 0.76, 0.77, 0.78]),   # without a: worse, a stays
+                           "abl2": _x("abl2", folds=[0.90, 0.91, 0.925, 0.93]),  # without b: better, b goes
+                           "abl3": _x("abl3", folds=[0.84, 0.86, 0.87, 0.87])})  # without c: no clear change
+    plans = _run(s, entry, st)
+    assert st["dropped"] == ["b"] and [p["id"] for p in plans] == ["ver"], st
+    assert sorted(plans[0]["backlog"]) == ["Ba", "Bc"]
+    _report(entry, plans, {"ver": _x("ver", "failed")})
+    assert _run(s, entry, st) == [] and st["final"] == "comb", st   # the verify failed: keep the full combination
+
+
+def test_failed_combination_falls_back_to_greedy():
+    s, entry, st = _round(_x("a", gain=0.1), _x("b", gain=0.08), _x("c", gain=0.05))
+    _report(entry, _run(s, entry, st), {"comb": _x("comb", "failed", folds=BASE)})
+    plans = _run(s, entry, st)
+    assert st["phase"] == "greedy" and [p["id"] for p in plans] == ["g1"] and plans[0]["compare_to"] == "a", plans
+    _report(entry, plans, {"g1": _x("g1", folds=[0.86, 0.87, 0.88, 0.89])})   # a + b beats a
+    plans = _run(s, entry, st)
+    assert [p["id"] for p in plans] == ["g2"] and plans[0]["compare_to"] == "g1", plans
+    assert sorted(plans[0]["backlog"]) == ["Ba", "Bb", "Bc"]
+    _report(entry, plans, {"g2": _x("g2", folds=[0.85, 0.87, 0.88, 0.88])})   # adding c does not help
+    assert _run(s, entry, st) == [] and st["final"] == "g1" and st["greedy"]["set"] == ["a", "b"], st
 
 
 def test_checkpoint_kinds_validate():

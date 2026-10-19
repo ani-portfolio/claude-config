@@ -1,6 +1,8 @@
 # Example for: autopilot.py backlog add <this file>
 # One change to one stage per item, so a result says what caused it. cost: 1 a setting, 2 a feature or a fold
-# change, 3 a new model type. A round takes the cheapest open items first, at most one per stage.
+# change, 3 a new model type. A round screens every open item; the ones that pass are combined and kept only while
+# they still help. An item upstream of the split (like the split item below) changes the folds, so it gets a round
+# of its own, before the rest.
 - stage: features
   change: Add a post COVID slope (weeks since 2020-03-01).
   hypothesis: A straight trend cannot follow the rise after 2020, so every model under-predicts the last year.

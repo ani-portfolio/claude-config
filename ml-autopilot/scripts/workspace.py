@@ -3,10 +3,10 @@
 
 An experiment never changes the project. It runs in a git worktree under .worktrees/ on a branch of its own
 (exp/v2-a), with the project's data and models copied in, and its MLflow runs are logged as candidates under the
-experiment's parent run (V2-a), itself a child of the version's parent run (V2). The best experiment that passes the
-iteration bar is adopted: its branch is merged into the version branch and its data and models are copied back.
-The others are discarded: their parent runs are tagged rejected and their worktrees removed. Their branches and
-MLflow runs stay for the record.
+experiment's parent run (V2-a), itself a child of the version's parent run (V2). The experiment the round settles on
+(autopilot.py round advance) is adopted: its branch is merged into the version branch and its data and models are
+copied back. The others are discarded: their parent runs are tagged rejected and their worktrees removed. Their
+branches and MLflow runs stay for the record.
 
 Commands (run from the project root with the project's Python):
     workspace.py create <id> [--json]       # the worktree for experiment <id> of the open round
@@ -142,7 +142,9 @@ def create(root, spec_path, exp_id):
     info = {"experiment": exp, "id": str(x["id"]), "iteration": entry["id"], "version": entry.get("version"),
             "parent_run": parent, "version_parent_run": entry.get("mlflow_parent_run"), "main_root": root,
             "workspace": path, "branch": branch, "hypothesis": x.get("hypothesis"), "changes": x.get("changes"),
-            "rerun": x.get("rerun"), "created_at": _now(), "agent_session": os.environ.get("ML_AGENT_SESSION")}
+            "rerun": x.get("rerun"), "phase": x.get("phase") or "screen", "compare_to": x.get("compare_to"),
+            "frozen_model": x.get("frozen_model"), "refs": x.get("refs"), "created_at": _now(),
+            "agent_session": os.environ.get("ML_AGENT_SESSION")}
     with open(os.path.join(path, ml_common.WORKSPACE_FILE), "w", encoding="utf-8") as f:
         json.dump(info, f, indent=1, default=str)
     if parent:

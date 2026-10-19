@@ -414,6 +414,9 @@ def migrate(spec):
             st = fr.get("status") or "not_started"
             bus["status"] = st if st in BUSINESS_STATUS else "draft"
         spec["business"] = bus
+    ap = spec.get("autopilot")
+    if isinstance(ap, dict) and isinstance(ap.get("settings"), dict):
+        ap["settings"] = _autopilot_settings_now(ap["settings"])
     return spec
 
 
@@ -620,8 +623,10 @@ def _get(d, dotted):
 
 # ---------------------------------------------------------------- the autopilot and its workspaces
 
-# What ml-autopilot does without asking, unless the user chose otherwise at the start of a run.
-AUTOPILOT_DEFAULTS = {"experiments_per_round": 2, "max_rounds": 3, "unattended": True}
+# What ml-autopilot does without asking, unless the user chose otherwise at the start of a run. max_parallel is how
+# many experiments of a round run at once (at most MAX_PARALLEL); a round tries every open backlog item.
+AUTOPILOT_DEFAULTS = {"max_parallel": 3, "unattended": True}
+MAX_PARALLEL = 5
 # Where an agent stops for a person. Each kind names the step it guards.
 CHECKPOINT_KINDS = {"business": "business", "framing": "framing", "test_v1": "evaluation", "test_final": "evaluation"}
 CHECKPOINT_STATUS = {"open", "cleared"}
@@ -644,8 +649,19 @@ def workspace_info(root):
     return info if isinstance(info, dict) else None
 
 
+def _autopilot_settings_now(settings):
+    """Settings from before rounds tried the whole backlog: experiments_per_round becomes max_parallel, and
+    max_rounds goes (the rounds are capped by iterations.bar.max_iterations)."""
+    out = dict(settings or {})
+    if "experiments_per_round" in out:
+        out.setdefault("max_parallel", out.pop("experiments_per_round"))
+        out.pop("experiments_per_round", None)
+    out.pop("max_rounds", None)
+    return out
+
+
 def autopilot_settings(spec):
-    return {**AUTOPILOT_DEFAULTS, **(((spec or {}).get("autopilot") or {}).get("settings") or {})}
+    return {**AUTOPILOT_DEFAULTS, **_autopilot_settings_now(((spec or {}).get("autopilot") or {}).get("settings"))}
 
 
 def autopilot_mode(args=None, root=None):
@@ -989,11 +1005,22 @@ def v1_summary(result):
 # iterations.bar: when a new champion (V2, V3, ...) really beats the champion carried forward from the version
 # before, judged on the same CV folds. min_fold_win_share: the new champion must win on more than this share of
 # the folds. spread_multiple: its mean improvement must be larger than this many standard deviations of the per
-# fold differences. min_folds: fewer paired folds than this cannot be judged. max_iterations and
-# max_consecutive_fails are the limits for iterating without a person; they are recorded here for the agent that
-# drives the workflow.
-ITERATION_BAR_DEFAULTS = {"min_fold_win_share": 0.5, "spread_multiple": 1.0, "min_folds": 3,
-                          "max_iterations": 3, "max_consecutive_fails": 2}
+# fold differences. min_folds: fewer paired folds than this cannot be judged. max_iterations is the most rounds of
+# iterating without a person; it is recorded here for the agent that drives the workflow.
+ITERATION_BAR_DEFAULTS = {"min_fold_win_share": 0.5, "spread_multiple": 1.0, "min_folds": 3, "max_iterations": 3}
+
+# Primary metrics where a lower score is better. model_core.HIGHER_IS_BETTER is the full list, where it is installed.
+LOWER_IS_BETTER = ("rmse", "mae", "mape", "wape", "log_loss", "brier")
+
+
+def lower_is_better(training):
+    """True when the training section's primary metric is better when lower."""
+    import importlib.util
+    key = str((training or {}).get("primary_label") or "").split("@")[0]
+    if importlib.util.find_spec("model_core"):
+        import model_core
+        return model_core.HIGHER_IS_BETTER.get(key) is False
+    return key in LOWER_IS_BETTER
 
 
 def iteration_bar(spec):
