@@ -330,6 +330,13 @@ def run_autopilot(c, root, spec_path, env):
             out = {"raw": (r.stdout + r.stderr)[-600:]}
         return r.returncode, out
 
+    # A kept answers file is passed straight back to its script, as its header says, and rebuilds the same split
+    before = (spec.get("split") or {}).get("strategy"), ((spec.get("split") or {}).get("cv") or {}).get("n_folds")
+    res = run_stage(root, env, "ml-train-test-split", os.path.join(root, "answers", "05_split.yaml"), ["--overwrite"])
+    s2 = ml_common.load(spec_path)
+    after = (s2.get("split") or {}).get("strategy"), ((s2.get("split") or {}).get("cv") or {}).get("n_folds")
+    c.check(res.get("exit_code") == 0 and after == before, "answers: the kept split answers rebuild the same split",
+            f"{before} -> {after}, exit {res.get('exit_code')}")
     code, _ = run(ap_ + ["start", "--experiments-per-round", "2", "--max-rounds", "1"])
     c.check(code == 0, "autopilot: settings recorded")
     code, nxt = run(ap_ + ["next"])

@@ -494,6 +494,32 @@ INFO_FLAGS = {"--suggest", "--check", "--list-columns", "--suggest-locations", "
 EXIT_REASONS = {0: "ok", 1: "failed", 2: "edited_notebook", 3: "edited_code"}
 
 
+def _is_saved_answers(d):
+    """A file save_answers wrote: the settings sit under answers, next to skill, stage and command."""
+    return isinstance(d, dict) and "answers" in d and {"skill", "stage"} <= set(d) and \
+        (d["answers"] is None or isinstance(d["answers"], dict))
+
+
+def _unwrap_saved_answers(argv):
+    """Let a kept answers/<NN>_<stage>.yaml be passed straight back to its script, as its header says: replace
+    each such file on the command line with a temporary copy of the settings it holds."""
+    swaps = {}
+    for p in _answers_files(argv):
+        try:
+            d = ml_common.load(p)
+        except Exception:  # noqa: BLE001
+            continue
+        if _is_saved_answers(d):
+            fd, tmp = tempfile.mkstemp(prefix="answers_", suffix=".yaml")
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(ml_common.dump_text(d["answers"] or {}))
+            swaps[p] = tmp
+    if swaps:
+        sys.argv[1:] = [swaps.get(a, a) for a in sys.argv[1:]]
+        argv[:] = [swaps.get(a, a) for a in argv]
+    return swaps
+
+
 def _answers_files(argv):
     """Answer files named on the command line: positional .yaml or .yml files, and the value after --answers."""
     out = []
@@ -519,6 +545,8 @@ def save_answers(root, stage, skill, argv, answers_paths=()):
             loaded = ml_common.load(p)
         except Exception:  # noqa: BLE001
             loaded = None
+        if _is_saved_answers(loaded):
+            loaded = loaded["answers"] or {}
         if isinstance(loaded, dict):
             answers.update(loaded)
     record = {"skill": skill, "stage": stage, "saved_at": _dt.datetime.now().replace(microsecond=0).isoformat(),
@@ -619,6 +647,7 @@ def cli(main_fn, stage, skill):
     code, error = 0, None
     try:
         _refuse_during_round(argv)
+        _unwrap_saved_answers(argv)
         main_fn()
     except SystemExit as e:
         if isinstance(e.code, int) or e.code is None:

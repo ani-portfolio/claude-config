@@ -162,9 +162,10 @@ def write_tracking_section(spec_path, uri, name, exp_id, skill=f"{KIND}-project-
     spec = ml_common.load(spec_path)
     if os.environ.get("MLFLOW_TRACKING_URI") and (spec.get("tracking") or {}).get("uri") not in (None, uri):
         return  # an address set for this shell only does not replace the project's own
+    old = spec.get("tracking") or {}
     spec["tracking"] = {"uri": uri, "experiment": name, "experiment_id": str(exp_id), "ui": ui_link(uri, exp_id)}
-    if KIND == "ml":
-        spec["tracking"]["registered_model"] = registered_model_name(spec)
+    if KIND == "ml":   # a name the project already chose is kept
+        spec["tracking"]["registered_model"] = old.get("registered_model") or registered_model_name(spec)
     ml_common.log(spec, skill, f"tracking: experiment {name} on {uri}")
     ml_common.save(spec_path, spec)
 
