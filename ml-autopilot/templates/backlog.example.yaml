@@ -1,0 +1,15 @@
+# Example for: autopilot.py backlog add <this file>
+# One change to one stage per item, so a result says what caused it. cost: 1 a setting, 2 a feature or a fold
+# change, 3 a new model type. A round takes the cheapest open items first, at most one per stage.
+- stage: features
+  change: Add a post COVID slope (weeks since 2020-03-01).
+  hypothesis: A straight trend cannot follow the rise after 2020, so every model under-predicts the last year.
+  cost: 2
+- stage: split
+  change: Two expanding backtest folds of 26 weeks instead of three of 13.
+  hypothesis: Validation that covers a full year makes CV agree with the test year.
+  cost: 2
+- stage: training
+  change: Tune the adstock decay per channel instead of one shared decay.
+  hypothesis: Channels carry over for different lengths of time, and one decay blurs their effects.
+  cost: 1
