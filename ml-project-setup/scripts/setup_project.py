@@ -55,7 +55,10 @@ EXTRA_GROUPS = {
     "tuning": ["optuna"],          # tuning in ml-model-training
     "boosting": ["lightgbm", "xgboost", "catboost"],
     "timeseries": ["statsmodels"],
-    "tracking": ["mlflow"],
+    # The client only: the full mlflow package (server and interface) runs once, outside the projects, as the shared
+    # server. The full package pins pyarrow and others below their latest versions, so in a project it can make uv
+    # fall back to a very old MLflow; mlflow-skinny has no such pins. Keep it on the server's major version.
+    "tracking": ["mlflow-skinny>=3.17,<4"],
     "sql": ["duckdb"],
     "dev": ["pytest", "ruff"],
 }
@@ -471,6 +474,17 @@ def req_name(spec):
     return re.split(r"[<>=!~\[; @]", spec.strip(), maxsplit=1)[0].lower().replace("_", "-")
 
 
+# Packages that already satisfy another: a project that lists the full mlflow does not also need mlflow-skinny
+# (both install the mlflow module).
+SATISFIED_BY = {"mlflow-skinny": {"mlflow"}}
+
+
+def listed(requirement, have):
+    """True when the package of a requirement such as 'mlflow-skinny>=3.17,<4' is already in the set of names."""
+    name = req_name(requirement)
+    return name in have or bool(SATISFIED_BY.get(name, set()) & have)
+
+
 def pyproject_deps(path):
     """Return (has_project_table, set of package names in dependencies, optional dependencies, and dev group)."""
     text = path.read_text(encoding="utf-8")
@@ -528,7 +542,7 @@ def step_dependencies(root, uv, mode, extras, rep, name, description, pyver, no_
         req = root / "requirements.txt"
         lines = req.read_text(encoding="utf-8").splitlines()
         have = {req_name(l) for l in lines if l.strip() and not l.strip().startswith(("#", "-"))}
-        missing = [p for p in wanted + dev if p.lower() not in have]
+        missing = [p for p in wanted + dev if not listed(p, have)]
         if missing:
             if not rep.dry_run:
                 text = req.read_text(encoding="utf-8")
@@ -573,7 +587,7 @@ def step_dependencies(root, uv, mode, extras, rep, name, description, pyver, no_
                     "the packages by hand.")
         return wanted + dev
     for group, pkgs in (("", wanted), ("--dev", dev)):
-        missing = [p for p in pkgs if p.lower() not in have]
+        missing = [p for p in pkgs if not listed(p, have)]
         if not missing:
             continue
         label = "dev group" if group else "dependencies"
@@ -585,7 +599,7 @@ def step_dependencies(root, uv, mode, extras, rep, name, description, pyver, no_
             rep.problem(f"uv add failed for {', '.join(missing)}:\n" + (r.stderr or r.stdout)[-2000:])
         else:
             rep.did(f"add to pyproject.toml {label}: {', '.join(missing)}")
-    if not any(p.lower() not in have for p in wanted + dev) and not created:
+    if not any(not listed(p, have) for p in wanted + dev) and not created:
         rep.kept("pyproject.toml already lists every base package")
     return wanted + dev
 

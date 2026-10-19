@@ -78,7 +78,11 @@ If AskUserQuestion is unavailable or the user is not present, use the placeholde
 
 Every project logs the runs of its modelling stages (split onwards, and reviews) to one shared MLflow server on this computer, at `http://127.0.0.1:5000`. The server keeps its data in `~/.mlflow/`, outside every project, so the experimentation agent and every project use the same store. The spec stays the record of decisions; MLflow records each run so it can be browsed and compared.
 
-The server is set up once per computer, not per project. Check it with:
+The server is set up once per computer, not per project. Projects get only the client, `mlflow-skinny` (pinned to the server's major version, `>=3.17,<4`), added to the `tracking` extra. The full `mlflow` package belongs to the server alone: in a project it pins packages such as `pyarrow` below their latest versions, and uv then quietly falls back to a very old MLflow that does not import. A project that already lists `mlflow` keeps it.
+
+On macOS, the AirPlay Receiver also listens on port 5000. If `status` says the server is not running but something answers on port 5000 with `Server: AirTunes`, ask the user to turn off AirPlay Receiver (System Settings, General, AirDrop and Handoff), or to set `MLFLOW_PORT` and `MLFLOW_TRACKING_URI` to another port.
+
+Check the server with:
 
 ```bash
 python3 ~/Projects/claude-skills/tools/mlflow_server.py status
@@ -132,6 +136,7 @@ The script exits with code 1 and a "Problems" list when something needs the user
 * **`CLAUDE.md` has an older ML workflow section.** The skills changed since the project was set up, for example the notebook names. Ask the user, then rerun with `--update-claude-md`, which replaces that section only.
 * **MLflow tracking not set up yet.** The shared server was not running. This is not an error. Give the user the server setup from the "MLflow tracking" section, then rerun with `--add-tracking`.
 * **git has no user name or email.** Nothing was committed. Give the user the two `git config --global` commands from the problem, and rerun with `--add-git` once they are set.
+* **MLflow tracking says the client is not installed, or `import mlflow` fails** (for example on `google.protobuf`). The project probably lists the full `mlflow` and uv resolved an old version. Ask the user, then replace it: `uv remove mlflow` and `uv add "mlflow-skinny>=3.17,<4"`, and rerun with `--add-tracking`.
 * **The mlflow command is not installed**, so Claude Code sessions are not traced. Tracking of runs still works. Give the user `uv tool install mlflow`, then rerun with `--add-tracking`.
 * **uv is not installed.** The script stopped before changing anything. Give the user the install command from the "uv" section, and rerun after they install it.
 * **`pyproject.toml` has no `[project]` table.** Tell the user the base packages were not added, and offer to add a `[project]` table with the Edit tool.

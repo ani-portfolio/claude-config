@@ -49,10 +49,18 @@ def is_up(timeout=1.5):
         return False
 
 
+def _in_venv(path):
+    """True for an executable inside a virtual environment, such as a project's .venv: its mlflow is the project's
+    client (or an old version uv fell back to), not the server."""
+    return (Path(path).resolve().parent.parent / "pyvenv.cfg").exists() or (Path(path).parent.parent / "pyvenv.cfg").exists()
+
+
 def mlflow_cmd():
-    """The mlflow executable: the one from `uv tool install mlflow`, else any on the PATH."""
+    """The mlflow executable: the one from `uv tool install mlflow`, else one on the PATH that is not inside a
+    virtual environment, else `uv tool run mlflow`."""
     for cand in (Path("~/.local/bin/mlflow").expanduser(), shutil.which("mlflow")):
-        if cand and Path(cand).exists():
+        if cand and Path(cand).exists() and (str(cand).startswith(str(Path("~/.local/bin").expanduser()))
+                                             or not _in_venv(cand)):
             return [str(cand)]
     uv = shutil.which("uv")
     if uv:

@@ -16,8 +16,9 @@ stages), it:
 5. for an exploratory fixture (business.mode exploratory), checks that the model card frames the result by the
    learning question.
 
-The real MLflow server and ~/.mlflow are never touched: MLFLOW_TRACKING_URI points at a sqlite file in the
-temporary folder.
+The real MLflow server and ~/.mlflow are never touched: each fixture gets a throwaway server (tools/mlflow_server.py
+with its own MLFLOW_HOME in the temporary folder and a free port), and the projects log to it over HTTP with the
+mlflow-skinny client, as real projects do.
 
 Usage:
     python3 tests/run_regression.py [fixture ...] [--iterate] [--iterate-all] [--keep] [--python PATH]
@@ -43,7 +44,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 SKILLS = os.path.dirname(HERE)
 FIXTURES = os.path.join(HERE, "fixtures")
 CACHE = os.path.expanduser("~/.cache/ml-skills-regression")
-PACKAGES = ["pandas", "pyarrow", "numpy", "scikit-learn", "lightgbm", "optuna", "mlflow", "nbformat", "nbclient",
+# mlflow-skinny, the client the projects install; the full mlflow is only the shared server.
+PACKAGES = ["pandas", "pyarrow", "numpy", "scikit-learn", "lightgbm", "optuna", "mlflow-skinny>=3.17,<4", "nbformat", "nbclient",
             "ipykernel", "matplotlib", "pyyaml", "cloudpickle", "jupyter_client"]
 
 STAGES = [  # (stage, skill folder, answers file, extra flags)
@@ -134,6 +136,30 @@ def run_stage(root, env, skill, answers, extra=()):
     if out.get("exit_code"):
         out["stderr_tail"] = r.stderr[-1500:]
     return out
+
+
+def free_port():
+    import socket
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+def mlflow_server(store, command):
+    """Start or stop a throwaway MLflow server with its data in `store`. Returns (tracking URI, environment)."""
+    port_file = os.path.join(store, "port")
+    if command == "start":
+        os.makedirs(store, exist_ok=True)
+        with open(port_file, "w") as f:
+            f.write(str(free_port()))
+    with open(port_file) as f:
+        port = f.read().strip()
+    senv = {**os.environ, "MLFLOW_HOME": store, "MLFLOW_PORT": port}
+    r = subprocess.run([sys.executable, os.path.join(SKILLS, "tools", "mlflow_server.py"), command], env=senv,
+                       capture_output=True, text=True)
+    if command == "start" and r.returncode:
+        sys.exit(f"Could not start a test MLflow server: {r.stdout}{r.stderr}")
+    return f"http://127.0.0.1:{port}"
 
 
 def mlflow_client(env):
@@ -298,9 +324,8 @@ def main():
     for i, name in enumerate(names):
         print(f"\n== {name}")
         store = os.path.join(base, f"{name}_mlflow")
-        os.makedirs(store, exist_ok=True)
-        env = {**os.environ, "PY": py, "MLFLOW_TRACKING_URI": f"sqlite:///{store}/mlflow.db",
-               "MLFLOW_DEFAULT_ARTIFACT_ROOT": os.path.join(store, "artifacts"), "MLFLOW_DISABLE_TELEMETRY": "true",
+        uri = mlflow_server(store, "start")
+        env = {**os.environ, "PY": py, "MLFLOW_TRACKING_URI": uri, "MLFLOW_DISABLE_TELEMETRY": "true",
                "MLFLOW_DISABLE_AGENT_HINT": "1", "ML_AGENT_SESSION": f"regression-{name}"}
         for k in ("ML_ITERATE_EXPERIMENT", "ML_ITERATE_ITERATION", "ML_ITERATE_PARENT_RUN"):
             env.pop(k, None)
@@ -319,6 +344,7 @@ def main():
                 run_iteration(c, root, spec_path, env, results)
             else:
                 c.check(False, "iteration test skipped because V1 failed")
+        mlflow_server(store, "stop")
         summary.append((name, len(c.passed), len(c.failed), c.failed))
         all_ok &= not c.failed
         with open(os.path.join(base, f"{name}_results.json"), "w") as f:

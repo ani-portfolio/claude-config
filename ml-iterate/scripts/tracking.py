@@ -105,7 +105,7 @@ def ready(spec):
     """(mlflow module, uri) when logging can work, else (None, reason)."""
     mlflow = _mlflow()
     if mlflow is None:
-        return None, "not installed in this project, so nothing was logged. Add it with `uv add mlflow`."
+        return None, "not installed in this project, so nothing was logged. Add the client with `uv add 'mlflow-skinny>=3.17,<4'`."
     uri = tracking_uri(spec)
     if not reachable(uri):
         return None, f"the server at {uri} is not reachable, so nothing was logged. {SERVER_HELP}"
@@ -909,7 +909,9 @@ def setup_claude_tracing(root, uri, experiment_id, hook_command=None):
     import subprocess
     cmd = None
     for cand in (os.path.expanduser("~/.local/bin/mlflow"), shutil.which("mlflow")):
-        if cand and os.path.exists(cand):
+        # Skip an mlflow inside a virtual environment (a project's .venv): that is the client, not the tool.
+        in_venv = cand and os.path.exists(os.path.join(os.path.dirname(os.path.dirname(cand)), "pyvenv.cfg"))
+        if cand and os.path.exists(cand) and (cand == os.path.expanduser("~/.local/bin/mlflow") or not in_venv):
             cmd = [cand]
             break
     if cmd is None and shutil.which("uv"):
