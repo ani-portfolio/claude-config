@@ -23,7 +23,8 @@ This is step <number> of the ML project skills: ml-project-setup, ml-business-fr
 2. **Never change input data.** Read from the `data_raw` folder, and write only to `data_processed`, `models`, `notebooks`, and `docs`.
 3. **No raw rows.** Work with column names and summary statistics. Do not print rows or paste data values into the reply.
 4. **Use the scripts.** <Main script> does the work, and spec changes go through `scripts/ml_common.py`.
-5. **Writing style.** Use simple language and full sentences. Use plain headings. Do not use dashes as punctuation.
+5. **Autopilot.** When the arguments include `autopilot` (ml-autopilot or an ml-experimenter agent is driving), or the project root has `.ml_workspace.json`, no person is present. Do not call AskUserQuestion. Take the recommended answer to every question, or the change the driver gave for this stage. Record each answer you took in `assumptions` with `source: autopilot draft`, and never set a framing to `status: confirmed`. Run the stage script with `--json`, and reply with its result and one line per assumption.
+6. **Writing style.** Use simple language and full sentences. Use plain headings. Do not use dashes as punctuation.
 
 ## Step 1: Find the project and the spec
 

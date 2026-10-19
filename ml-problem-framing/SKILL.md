@@ -17,7 +17,8 @@ This is step 5 of the ML project skills: ml-project-setup, ml-business-framing (
 3. **One question at a time.** Ask exactly one question per message, then wait for the answer before asking the next. Never send a numbered list of questions, and never put more than one question in an AskUserQuestion call. Lead with proposals, so the user can confirm instead of typing. Keep the interview short by skipping anything the spec, the dictionary, or an earlier answer already settles.
 4. **No raw data in the reply.** Use column names and the summary numbers in the spec, the dictionary, and the notebook checks. Do not print rows or values.
 5. **Use the scripts.** `scripts/make_notebook.py` builds and runs the notebook, and the notebook writes the spec. Do not edit the `framing` section or `data.excluded_cols` by hand.
-6. **Writing style.** Use simple language and full sentences. Use plain headings. Do not use dashes as punctuation.
+6. **Autopilot.** When the arguments include `autopilot` (ml-autopilot or an ml-experimenter agent is driving), or the project root has `.ml_workspace.json`, no person is present. Do not call AskUserQuestion. Take the recommended answer to every question, or the change the driver gave for this stage. Record each answer you took in `assumptions` with `source: autopilot draft`, and never set a framing to `status: confirmed`. Run the stage script with `--json`, and reply with its result and one line per assumption. Draft every field, including `v1_criteria`, and leave the section as `status: draft`.
+7. **Writing style.** Use simple language and full sentences. Use plain headings. Do not use dashes as punctuation.
 
 ## Step 1: Find the project and read what came before
 

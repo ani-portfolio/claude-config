@@ -26,7 +26,8 @@ This is step 8 of the ML project skills: ml-project-setup, ml-business-framing (
 4. **Push back** on a feature that cannot be known at the prediction time, on month or week features with under a year of history, and on a confirmed leakage flag without a convincing reason.
 5. **No raw data in the reply.** Use column names, counts, and scores.
 6. **Use the scripts.** `scripts/make_notebook.py` installs the code, builds the notebook, and runs it. Do not edit `src/features.py` or the `features` section of the spec by hand.
-7. **Writing style.** Use simple language and full sentences. Use plain headings. Do not use dashes as punctuation.
+7. **Autopilot.** When the arguments include `autopilot` (ml-autopilot or an ml-experimenter agent is driving), or the project root has `.ml_workspace.json`, no person is present. Do not call AskUserQuestion. Take the recommended answer to every question, or the change the driver gave for this stage. Record each answer you took in `assumptions` with `source: autopilot draft`, and never set a framing to `status: confirmed`. Run the stage script with `--json`, and reply with its result and one line per assumption.
+8. **Writing style.** Use simple language and full sentences. Use plain headings. Do not use dashes as punctuation.
 
 ## Step 1: Find the project and check the gate
 

@@ -22,7 +22,8 @@ Data discovery describes the data as it is. It does not pick a target and it doe
 2. **Never change the data.** Read only. Suggest fixes, do not apply them.
 3. **Draft, flag, never guess.** The dictionary is drafted from the column names and the data. When the meaning or the timing of a column cannot be worked out, it stays empty and flagged for review. Claude may improve the wording of a clear draft, and may fill in a flagged entry only from something the user or a document said. `reference/dictionary_rules.md` explains every rule.
 4. **Use the scripts.** `scripts/discover.py` builds and runs the notebook. The notebook uses `scripts/eda_core.py` (the EDA engine), `scripts/nb_common.py` (notebooks), and `scripts/ml_common.py` (the spec). Do not edit `docs/data_dictionary.yaml` or the `discovery` section by hand, because the next run would undo it.
-5. **Writing style.** Use simple language and full sentences. Use plain headings. Do not use dashes as punctuation.
+5. **Autopilot.** When the arguments include `autopilot` (ml-autopilot or an ml-experimenter agent is driving), or the project root has `.ml_workspace.json`, no person is present. Do not call AskUserQuestion. Take the recommended answer to every question, or the change the driver gave for this stage. Record each answer you took in `assumptions` with `source: autopilot draft`, and never set a framing to `status: confirmed`. Run the stage script with `--json`, and reply with its result and one line per assumption.
+6. **Writing style.** Use simple language and full sentences. Use plain headings. Do not use dashes as punctuation.
 
 ## Step 1: Find the project and the spec
 

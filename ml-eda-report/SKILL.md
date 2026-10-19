@@ -19,7 +19,8 @@ These apply for the whole task.
 1. **Summary statistics only, with one exception.** The only place raw rows appear is the `df.head()` cell that the generated notebook runs right after loading the data, which the user asked for. Apart from that, never print raw rows. Do not run `df.head()`, `df.sample()`, `cat`, `head`, or similar commands on the data yourself, do not read notebook outputs that show rows, and do not paste data values into your reply. Reading column names is fine. The report sections hide values of identifier, free text, and personal data columns. Markdown reports do not include `df.head()`, so no raw rows are written into them.
 2. **Never change the data.** The report only reads data. Suggest fixes, but do not apply them to the user's files.
 3. **Use the scripts.** All analysis goes through `scripts/run_eda.py` or `scripts/eda_core.py`, and spec changes go through `scripts/ml_common.py`, so results are consistent between runs, between markdown and notebook output, and with the other skills.
-4. **Writing style.** Use simple language and full sentences. Use plain headings. Do not use dashes as punctuation.
+4. **Autopilot.** When the arguments include `autopilot` (ml-autopilot or an ml-experimenter agent is driving), or the project root has `.ml_workspace.json`, no person is present. Do not call AskUserQuestion. Take the recommended answer to every question, or the change the driver gave for this stage. Record each answer you took in `assumptions` with `source: autopilot draft`, and never set a framing to `status: confirmed`. Run the stage script with `--json`, and reply with its result and one line per assumption.
+5. **Writing style.** Use simple language and full sentences. Use plain headings. Do not use dashes as punctuation.
 
 ## Step 1: Work out the input and the output
 

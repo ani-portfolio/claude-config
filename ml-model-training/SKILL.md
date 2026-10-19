@@ -26,7 +26,8 @@ This is step 10 of the ML project skills: ml-project-setup, ml-business-framing 
 5. **Push back** on a thorough search when a quick one has already flattened, on class weights when the output is used as a probability, and on a champion that does not beat the best baseline.
 6. **No raw data in the reply.** Use metrics and counts.
 7. **Use the scripts.** `scripts/make_notebook.py` builds the notebook or adds models to it, and runs it. Do not write the `training` section by hand.
-8. **Writing style.** Use simple language and full sentences. Use plain headings. Do not use dashes as punctuation.
+8. **Autopilot.** When the arguments include `autopilot` (ml-autopilot or an ml-experimenter agent is driving), or the project root has `.ml_workspace.json`, no person is present. Do not call AskUserQuestion. Take the recommended answer to every question, or the change the driver gave for this stage. Record each answer you took in `assumptions` with `source: autopilot draft`, and never set a framing to `status: confirmed`. Run the stage script with `--json`, and reply with its result and one line per assumption.
+9. **Writing style.** Use simple language and full sentences. Use plain headings. Do not use dashes as punctuation.
 
 ## Step 1: Find the project and check the gate
 
