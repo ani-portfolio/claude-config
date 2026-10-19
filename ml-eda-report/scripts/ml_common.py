@@ -317,6 +317,7 @@ def template(name=None, description=None):
         "training": {},
         "evaluation": {},
         "iterations": {"current": None, "entries": []},  # written by the ml-iterate helper skill
+        "autopilot": {},  # written by the ml-autopilot helper skill when an agent drives the workflow
         "assumptions": [],
         "open_questions": [],
         "decisions": [],
@@ -617,6 +618,49 @@ def _get(d, dotted):
     return d
 
 
+# ---------------------------------------------------------------- the autopilot and its workspaces
+
+# What ml-autopilot does without asking, unless the user chose otherwise at the start of a run.
+AUTOPILOT_DEFAULTS = {"experiments_per_round": 2, "max_rounds": 3, "unattended": True}
+# Where an agent stops for a person. Each kind names the step it guards.
+CHECKPOINT_KINDS = {"business": "business", "framing": "framing", "test_v1": "evaluation", "test_final": "evaluation"}
+CHECKPOINT_STATUS = {"open", "cleared"}
+WORKSPACE_FILE = ".ml_workspace.json"
+
+
+def workspace_info(root):
+    """The experiment a workspace (a git worktree made by ml-autopilot's workspace.py) belongs to, from the
+    WORKSPACE_FILE at its root: {experiment, iteration, parent_run, main_root, branch, ...}, or None outside one."""
+    if not root:
+        return None
+    p = os.path.join(root, WORKSPACE_FILE)
+    if not os.path.exists(p):
+        return None
+    try:
+        with open(p, encoding="utf-8") as f:
+            info = json.load(f)
+    except (OSError, ValueError):
+        return None
+    return info if isinstance(info, dict) else None
+
+
+def autopilot_settings(spec):
+    return {**AUTOPILOT_DEFAULTS, **(((spec or {}).get("autopilot") or {}).get("settings") or {})}
+
+
+def autopilot_mode(args=None, root=None):
+    """True when a stage skill runs without a person: called by ml-autopilot (the word autopilot in its
+    arguments, or ML_AUTOPILOT=1), or inside an experiment workspace."""
+    words = str(args or "").lower().replace(",", " ").split()
+    return ("autopilot" in words or "--autopilot" in words or os.environ.get("ML_AUTOPILOT") == "1"
+            or workspace_info(root) is not None)
+
+
+def open_checkpoints(spec):
+    return [c for c in (((spec or {}).get("autopilot") or {}).get("checkpoints") or [])
+            if isinstance(c, dict) and c.get("status") == "open"]
+
+
 def validate(spec):
     """Return (errors, missing_required, missing_recommended)."""
     errors = []
@@ -670,6 +714,14 @@ def validate(spec):
     for i, a in enumerate(aa if isinstance(aa, list) else []):
         if not (isinstance(a, dict) and a.get("answer") and a.get("action")):
             errors.append(f"business.answer_actions[{i}] needs an answer and an action.")
+    ap = spec.get("autopilot")
+    if ap is not None and not isinstance(ap, dict):
+        errors.append("autopilot must be a mapping.")
+        ap = {}
+    for i, c in enumerate((ap or {}).get("checkpoints") or []):
+        if not (isinstance(c, dict) and c.get("kind") in CHECKPOINT_KINDS and c.get("status") in CHECKPOINT_STATUS):
+            errors.append(f"autopilot.checkpoints[{i}] needs a kind ({', '.join(CHECKPOINT_KINDS)}) and a status "
+                          f"({', '.join(sorted(CHECKPOINT_STATUS))}).")
     errors += [f"framing.success.v1_criteria: {p}" for p in v1_problems(((fr.get("success") or {}).get("v1_criteria")))]
     leftovers = [k for k in _MOVED_TO_BUSINESS if k in fr]
     if leftovers:
@@ -1092,6 +1144,14 @@ def consistency_checks(spec):
                 add("iteration bar", f"Iteration {e.get('id')} was kept, but its new champion failed the iteration bar "
                     "and no decision says why it was kept anyway.", f"iterations.entries.{e.get('id')}")
 
+    # A framing confirmed while the autopilot's checkpoint for it is still open: only the person's review at the
+    # checkpoint may confirm it
+    for c in open_checkpoints(spec):
+        sec = {"business": "business", "framing": "framing"}.get(c.get("kind"))
+        if sec and ((spec.get(sec) or {}).get("status")) == "confirmed":
+            add("checkpoint", f"The {sec} section is confirmed, but the autopilot checkpoint for it is still open, so "
+                "nobody has reviewed the drafts yet.", f"autopilot.checkpoints.{c.get('kind')}")
+
     # Open questions for stages that are finished
     order = [s[0] for s in STEPS]
     nxt = next_step(spec)[0]
@@ -1163,6 +1223,16 @@ def _print_status(spec, path):
     print(f"Open questions: {len(oq)}")
     for q in oq:
         print(f"  {q.get('id')} [{q.get('stage')}] {q.get('question')}")
+    ap = spec.get("autopilot") or {}
+    if ap.get("settings"):
+        cps = open_checkpoints(spec)
+        print("Autopilot: " + (f"stopped at the {cps[-1]['kind']} checkpoint ({cps[-1].get('file')}); resume with "
+                               "/ml-autopilot." if cps else
+                               f"stopped iterating: {(ap.get('stopped') or {}).get('reason')}" if ap.get("stopped")
+                               else "running; /ml-autopilot shows the next action."))
+    ws = workspace_info(root)
+    if ws:
+        print(f"Workspace: experiment {ws.get('experiment')} on branch {ws.get('branch')}, a copy of {ws.get('main_root')}.")
     step, skill, how = next_step(spec)
     print("Next: " + (f"run the {skill} skill" + (f", {how}" if how else "") + f" ({step})." if step
                       else "every step is done."))

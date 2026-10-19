@@ -493,18 +493,21 @@ def _register_champion(C, spec, root):
         for k, v in {"run_log_id": champ.get("run_id"), "data_version": tr.get("data_version"),
                      "project_root": root, "model_type": champ.get("type")}.items():
             client.set_model_version_tag(name, version, k, str(v))
-    cand = candidate(spec)
+    cand = candidate(spec, root)
     ver = current_version(spec)
     C.tags({"registered_model": name, "registered_version": version})
     # Every version's champion keeps an alias of its own (champion-v1, champion-v2, ...), so versions can be
-    # loaded and compared
-    client.set_registered_model_alias(name, version_alias(ver), version)
+    # loaded and compared. Experiments of one version run side by side in workspaces, so each one's champion gets
+    # an alias of its own instead (candidate-v2-a); promote gives the adopted one the version's alias.
+    workspace = bool(cand and not cand["in_place"])
+    alias = candidate_alias(cand["experiment"]) if workspace else version_alias(ver)
+    client.set_registered_model_alias(name, alias, version)
     client.set_model_version_tag(name, version, "version", ver)
     if cand:   # a candidate champion is registered but never takes the alias until its experiment is promoted
         if not reused:   # a version that already existed (the same model) keeps its own tags
             client.set_model_version_tag(name, version, "candidate", "true")
             client.set_model_version_tag(name, version, "experiment", cand["experiment"])
-        print(f"MLflow: candidate champion registered as {name} version {version} (alias {version_alias(ver)}) for "
+        print(f"MLflow: candidate champion registered as {name} version {version} (alias {alias}) for "
               f"{cand['experiment']}; the alias 'champion' is unchanged until the version is promoted.")
         return
     client.set_registered_model_alias(name, "champion", version)
@@ -734,11 +737,13 @@ if KIND == "ab":
 
 # ---------------------------------------------------------------- one run per stage notebook
 
-def candidate(spec=None):
+def candidate(spec=None, root=None):
     """The version experiment this run belongs to, or None.
 
     Two sources. A workspace run (an agent working on a copy of the project) sets ML_ITERATE_EXPERIMENT and the
-    parent run in the environment: its runs never become current. An iteration opened in the project itself by
+    parent run in the environment, or ml-autopilot's workspace.py writes them to .ml_workspace.json at the
+    workspace root (each shell command of an agent starts a fresh shell, so the file is the reliable source): its
+    runs never become current. An iteration opened in the project itself by
     ml-iterate is read from the spec (the open iteration's version and parent run), because each Claude Code
     command starts a fresh shell: its runs become current, so MLflow keeps matching the spec, but stay candidates
     until the iteration closes, and the alias 'champion' only moves when the version is promoted."""
@@ -747,6 +752,10 @@ def candidate(spec=None):
         return {"experiment": exp, "iteration": os.environ.get("ML_ITERATE_ITERATION"),
                 "parent": os.environ.get("ML_ITERATE_PARENT_RUN"),
                 "agent_session": os.environ.get("ML_AGENT_SESSION"), "in_place": False}
+    ws = ml_common.workspace_info(root) if root else None
+    if ws and ws.get("experiment"):
+        return {"experiment": ws["experiment"], "iteration": ws.get("iteration"), "parent": ws.get("parent_run"),
+                "agent_session": os.environ.get("ML_AGENT_SESSION") or ws.get("agent_session"), "in_place": False}
     it = (spec or {}).get("iterations") or {}
     e = next((x for x in it.get("entries") or [] if x.get("id") == it.get("current") and x.get("status") == "open"),
              None)
@@ -760,6 +769,11 @@ def candidate(spec=None):
 def version_alias(version):
     """The alias each version's champion keeps: champion-v1, champion-v2, ... MLflow reserves v1, v2 for itself."""
     return f"champion-{str(version).lower()}"
+
+
+def candidate_alias(experiment):
+    """The alias of the champion an experiment in a workspace registered: candidate-v2-a."""
+    return "candidate-" + re.sub(r"[^a-z0-9-]+", "-", str(experiment).lower()).strip("-")
 
 
 def current_version(spec):
@@ -807,7 +821,7 @@ def log_stage(spec_path, stage, notebook, skill):
         section = spec.get(stage) or {}
         tags = {"project": (spec.get("project") or {}).get("name"), "project_root": root, "stage": stage,
                 "skill": skill, "notebook": ml_common.relpath(notebook, root), "run_type": "stage",
-                "current": "false" if (candidate(spec) and not candidate(spec)["in_place"]) else "true",
+                "current": "false" if (candidate(spec, root) and not candidate(spec, root)["in_place"]) else "true",
                 "version": current_version(spec), "git_branch": _git_branch(root),
                 "agent_session": os.environ.get("ML_AGENT_SESSION"),
                 "data_version": (spec.get("training") or {}).get("data_version") if KIND == "ml" else None,
@@ -818,7 +832,7 @@ def log_stage(spec_path, stage, notebook, skill):
         import warnings
         warnings.filterwarnings("ignore", module=r"mlflow\..*")
         logging.getLogger("mlflow").setLevel(logging.ERROR)
-        cand = candidate(spec)
+        cand = candidate(spec, root)
         if cand:
             tags.update({"candidate": "true", "experiment": cand["experiment"], "iteration": cand["iteration"],
                          "agent_session": cand["agent_session"], "mlflow.parentRunId": cand["parent"]})
@@ -1113,6 +1127,9 @@ def promote(spec_path, experiment):
         version = max(tagged, key=lambda v: int(v.version)).version if tagged else None
     if version is not None:
         client.set_registered_model_alias(name, "champion", version)
+        ver_tag = client.get_model_version(name, version).tags.get("version")
+        if ver_tag:   # the adopted experiment's champion becomes its version's champion (champion-v2)
+            client.set_registered_model_alias(name, version_alias(ver_tag), version)
         mv = client.get_model_version(name, version)
         if mv.tags.get("candidate") == "true":
             client.set_model_version_tag(name, version, "candidate", "promoted")

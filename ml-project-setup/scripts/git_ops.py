@@ -179,6 +179,74 @@ def stage_paths(spec, root, stage, spec_path):
             os.path.join(root, ".gitignore")]
 
 
+# ---------------------------------------------------------------- worktrees for experiments
+
+def worktree_add(root, path, new_branch, start="HEAD"):
+    """A new worktree at path on a new branch made from start. ml-autopilot runs each experiment in one, so the
+    project itself is never touched by an experiment. Returns (done, message)."""
+    if not is_repo(root):
+        return False, "the project is not a git repository, so no worktree was made"
+    if new_branch in PROTECTED:
+        return False, f"refusing to make a worktree on {new_branch}"
+    if branch_exists(root, new_branch):
+        return False, f"the branch {new_branch} exists already"
+    r = git(root, "worktree", "add", "-q", "-b", new_branch, path, start)
+    if r.returncode != 0:
+        return False, f"git worktree add failed: {(r.stderr or r.stdout).strip()[:300]}"
+    return True, f"worktree {path} on branch {new_branch}"
+
+
+def worktree_remove(root, path):
+    """Remove a worktree, even with untracked or ignored files in it (the data and model copies). Its branch is
+    kept for the record."""
+    if not is_repo(root):
+        return False
+    r = git(root, "worktree", "remove", "--force", path)
+    git(root, "worktree", "prune")
+    return r.returncode == 0
+
+
+def worktrees(root):
+    """[{path, branch, head}] for every worktree of the repository, the main one first."""
+    if not is_repo(root):
+        return []
+    out, cur = [], {}
+    for line in git(root, "worktree", "list", "--porcelain").stdout.splitlines():
+        if not line.strip():
+            if cur:
+                out.append(cur)
+            cur = {}
+            continue
+        key, _, val = line.partition(" ")
+        if key == "worktree":
+            cur["path"] = val
+        elif key == "branch":
+            cur["branch"] = val.removeprefix("refs/heads/")
+        elif key == "HEAD":
+            cur["head"] = val
+    if cur:
+        out.append(cur)
+    return out
+
+
+def merge_branch(root, source, message, prefer=None):
+    """Merge source into the current branch with a merge commit. Never on main. prefer='theirs' settles conflicting
+    hunks in favour of source (ml-autopilot adopting an experiment, whose spec is the one to keep). Returns
+    (done, message)."""
+    if not is_repo(root):
+        return False, "the project is not a git repository"
+    b = branch(root)
+    if b in PROTECTED or b is None:
+        return False, f"refusing to merge into {b or 'no branch'}"
+    if not identity(root):
+        return False, _no_identity()
+    r = git(root, "merge", "--no-ff", "-q", *(["-X", prefer] if prefer else []), "-m", f"{message}\n\n{TRAILER}", source)
+    if r.returncode != 0:
+        git(root, "merge", "--abort")
+        return False, f"git merge failed and was aborted: {(r.stderr or r.stdout).strip()[:300]}"
+    return True, f"merged {source} into {b}"
+
+
 def status(root):
     if not is_repo(root):
         return {"repo": False}

@@ -85,6 +85,9 @@ from pathlib import Path
 here = [Path.cwd(), *Path.cwd().parents]
 ROOT = next((p for p in here if (p / "{SPEC_NAME}").is_file()), Path.cwd())
 os.chdir(ROOT)
+# The project's own code (src) comes from this folder, also in an experiment's worktree, where the editable
+# install in .venv would point to the main project.
+sys.path.insert(0, str(ROOT))
 
 # Shared code from the {'A/B testing' if SPEC_LIB == 'ab_common' else 'ML project'} skills
 sys.path.insert(0, r"{scripts_dir}")
@@ -577,6 +580,27 @@ def after_build(spec_path, stage, skill, answers_path=None):
     return out
 
 
+def _refuse_during_round(argv):
+    """While an ml-autopilot round is open, its experiments run in their own worktrees and the project must not
+    change: a stage build in the project itself (an agent that forgot to cd to its workspace, say) is refused."""
+    if set(argv) & INFO_FLAGS:
+        return
+    spec_arg = argv[argv.index("--spec") + 1] if "--spec" in argv and argv.index("--spec") + 1 < len(argv) else None
+    try:
+        path = ml_common.spec_path(spec_arg)
+        spec = ml_common.load(path) if os.path.exists(path) else {}
+    except Exception:  # noqa: BLE001
+        return
+    it = spec.get("iterations") or {}
+    entry = next((e for e in it.get("entries") or [] if isinstance(e, dict) and e.get("id") == it.get("current")
+                  and e.get("status") == "open"), None)
+    root = os.path.dirname(os.path.abspath(path))
+    if entry and entry.get("experiments") and not getattr(ml_common, "workspace_info", lambda r: None)(root):
+        sys.exit(f"An ml-autopilot round ({entry.get('version')}) is open, so this project must not change while its "
+                 f"experiments run. Run the stage inside the experiment's workspace (.worktrees/<experiment>/), or "
+                 f"close the round with autopilot.py round close first.")
+
+
 def cli(main_fn, stage, skill):
     """Run a stage script's main(). Adds two things every stage script shares:
 
@@ -594,6 +618,7 @@ def cli(main_fn, stage, skill):
         sys.stdout = sys.stderr
     code, error = 0, None
     try:
+        _refuse_during_round(argv)
         main_fn()
     except SystemExit as e:
         if isinstance(e.code, int) or e.code is None:

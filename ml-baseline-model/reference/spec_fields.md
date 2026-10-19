@@ -18,6 +18,7 @@
 | `tracking` | ml-project-setup | every stage that logs to MLflow, ml-status, ml-review |
 | `version` | ml-project-setup (V1), then ml-iterate | every stage that logs or commits, ml-status |
 | `git` | ml-project-setup | `nb_common.cli`, ml-iterate |
+| `autopilot` | ml-autopilot (`scripts/autopilot.py`) | ml-autopilot, ml-status |
 | `notebooks` | `nb_common.py`, when a stage notebook runs | ml-status |
 | `assumptions`, `open_questions`, `decisions` | any skill, append only | all |
 | `history` | `ml_common.py` | people |
@@ -336,6 +337,8 @@ Each entry:
 | `version`, `previous_version` | The version this iteration builds (iteration N builds V(N+1)) and the version it started from. |
 | `mlflow_parent_run` | The MLflow run of the version (`run_type = experiment`). Every stage run of the iteration is logged as its child. |
 | `end` | The state it ended with: `champion`, `cv`, `test`, `test_look`, `data_version`, and `carried_forward_cv` (the carried champion's CV score on the new folds, when it was trained). |
+| `experiments` | A round driven by ml-autopilot only: one record per experiment, see below. |
+| `adopted` | A round only: the experiment adopted into the project (`V2-a`), or absent when none passed. |
 | `bar_result` | The iteration bar applied when it closed (`ml_common.iteration_bar_evaluate`): `status` (`pass`, `fail`, or `incomplete`), `wins`, `folds`, `mean_diff`, `spread`, and `detail`. |
 
 Opening and closing an iteration also add an entry to `decisions` with stage `iteration`.
@@ -347,8 +350,36 @@ Opening and closing an iteration also add an entry to `decisions` with stage `it
 | `min_fold_win_share` | 0.5 | The new champion must win on more than this share of the paired folds. |
 | `spread_multiple` | 1.0 | Its mean improvement must be larger than this many standard deviations of the per fold differences. |
 | `min_folds` | 3 | With fewer paired folds, the bar is `incomplete`, never `fail`. |
-| `max_iterations` | 3 | Iterating without a person stops after this many iterations. Recorded for the agent that drives the workflow; not enforced by ml-iterate. |
-| `max_consecutive_fails` | 2 | Iterating without a person stops after this many iterations in a row that fail the bar. Also for that agent. |
+| `max_iterations` | 3 | Iterating without a person stops after this many rounds. Enforced by ml-autopilot, not by ml-iterate. |
+| `max_consecutive_fails` | 2 | Iterating without a person stops after this many rounds in a row where nothing was adopted. Also enforced by ml-autopilot. |
+
+Each record in a round's `experiments`:
+
+| Field | Meaning |
+|---|---|
+| `id` | A short id within the round: `a`, `b`, ... |
+| `experiment` | Its name in MLflow and git: `<version>-<id>` (`V2-a`). Its branch is `exp/v2-a` and its worktree `.worktrees/v2-a`. |
+| `hypothesis`, `changes`, `rerun` | One change, why, and the stages it reruns. The rerun never includes evaluation: an experiment is judged on CV. |
+| `backlog` | The id of the `autopilot.backlog` item it came from. |
+| `status` | `planned`, `running`, then `passed`, `failed` (the bar failed or was incomplete), or `error` (the agent stopped), and at close `adopted` or `discarded`. |
+| `bar`, `champion`, `cv`, `v1_cv`, `problems`, `summary` | What the experiment reported in its `experiment_result.json`. |
+| `workspace`, `branch`, `mlflow_parent_run` | Where it ran, and its MLflow parent run (a child of the version's run). |
+
+## autopilot
+
+Written only by ml-autopilot. Absent in projects no agent has driven.
+
+| Field | Meaning |
+|---|---|
+| `settings` | `experiments_per_round` (2), `max_rounds` (3), and `unattended`, agreed with the person at the start of the run (`ml_common.AUTOPILOT_DEFAULTS`). |
+| `started_at` | When the run started. |
+| `checkpoints` | Each stop for the person: `kind` (`business`, `framing`, `test_v1`, `test_final`), `status` (`open` or `cleared`), `opened_at`, `cleared_at`, `file` (`docs/checkpoint.md`), and a `note`. |
+| `backlog` | Candidate experiments, one change each: `id` (`B1`), `stage`, `change`, `hypothesis`, `cost` (1 to 3), `status` (`open`, `in_round`, `tried`, `adopted`), `round`, and `result`. |
+| `stopped` | `at` and `reason` when iterating was stopped early. |
+
+## The workspace file
+
+An experiment's worktree has `.ml_workspace.json` at its root (ignored by git): `experiment`, `id`, `iteration`, `version`, `parent_run`, `version_parent_run`, `main_root`, `workspace`, `branch`, `hypothesis`, `changes`, and `rerun`. `tracking.candidate` reads it, so every stage run in the worktree is logged as a candidate of the experiment without environment variables. `ml_common.autopilot_mode` treats a project with the file as driven by an agent.
 
 ## version
 
