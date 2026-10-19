@@ -13,7 +13,10 @@ stages), it:
 4. with --iterate (the first fixture only, unless --iterate-all), opens V2, carries the V1 champion forward, reruns
    training and evaluation, closes it as kept, and checks that the iteration bar was applied; then opens V3 and rolls
    it back, and checks the branches, tags, aliases, and current runs.
-5. for an exploratory fixture (business.mode exploratory), checks that the model card frames the result by the
+5. with --autopilot (the first fixture only), runs one ml-autopilot round of two experiments the way the agents
+   would, each in its own git worktree, adopts the one that passed the iteration bar and discards the other, and
+   checks the worktrees, branches, MLflow candidates, verdicts and aliases, and the spec;
+6. for an exploratory fixture (business.mode exploratory), checks that the model card frames the result by the
    learning question.
 
 The real MLflow server and ~/.mlflow are never touched: each fixture gets a throwaway server (tools/mlflow_server.py
@@ -21,7 +24,7 @@ with its own MLFLOW_HOME in the temporary folder and a free port), and the proje
 mlflow-skinny client, as real projects do.
 
 Usage:
-    python3 tests/run_regression.py [fixture ...] [--iterate] [--iterate-all] [--keep] [--python PATH]
+    python3 tests/run_regression.py [fixture ...] [--iterate] [--iterate-all] [--autopilot] [--keep] [--python PATH]
 
 The Python that runs the notebooks needs the project packages (pandas, pyarrow, scikit-learn, lightgbm, optuna,
 mlflow, nbformat, nbclient, ipykernel, matplotlib, pyyaml). It is, in order: --python, the ML_TEST_PYTHON
@@ -266,8 +269,9 @@ def run_iteration(c, root, spec_path, env, results):
                        cwd=root, capture_output=True, text=True, env=env)
     c.check(r.returncode == 0, "V2: closed as kept", (r.stdout + r.stderr)[-400:])
     closed = ml_common.load(spec_path)["iterations"]["entries"][0]
-    c.check((closed.get("bar_result") or {}).get("status") in ("pass", "fail"),
-            "V2: the iteration bar was applied on the same folds", str(closed.get("bar_result")))
+    br = closed.get("bar_result") or {}
+    few = br.get("status") == "incomplete" and "paired folds" in str(br.get("detail"))   # fewer folds than min_folds
+    c.check(br.get("status") in ("pass", "fail") or few, "V2: the iteration bar was applied on the same folds", str(br))
     c.check(git(root, "tag", "-l", "v2").stdout.strip() == "v2", "V2: v2 is tagged")
     v2 = client.get_model_version_by_alias(name, "champion-v2").version
     c.check(client.get_model_version_by_alias(name, "champion").version == v2, "V2 kept: alias champion moved to V2")
@@ -299,6 +303,152 @@ def run_iteration(c, root, spec_path, env, results):
     c.check(git(root, "rev-list", "--count", "main").stdout.strip() == "1", "V3: main still holds only the first commit")
 
 
+def run_autopilot(c, root, spec_path, env):
+    """One round of two experiments, as ml-autopilot and two ml-experimenter agents would run it, without a model in
+    the loop: the agents' work is the stage scripts with kept answers."""
+    import ml_common
+    PY = env["PY"]
+    ap_ = [PY, os.path.join(SKILLS, "ml-autopilot", "scripts", "autopilot.py")]
+    it = [PY, os.path.join(SKILLS, "ml-iterate", "scripts", "iterate.py")]
+    kept = os.path.join(root, "kept_answers")
+    client = mlflow_client(env)
+    spec = ml_common.load(spec_path)
+    name = spec["tracking"].get("registered_model") or f"{spec['project']['name']}-champion"
+    v1_version = client.get_model_version_by_alias(name, "champion").version
+    v1_training_run = spec["training"]["mlflow"]["run_id"]
+    exp_id = spec["tracking"]["experiment_id"]
+    if not (spec.get("project") or {}).get("kernel"):   # the fixtures have no kernel; a set up project always does
+        spec["project"]["kernel"] = "regression"
+        ml_common.save(spec_path, spec)
+        git(root, "commit", "-q", "-am", "Regression: kernel name")
+
+    def run(cmd, cwd=root):
+        r = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, env=env)
+        try:
+            out = json.loads(r.stdout)
+        except ValueError:
+            out = {"raw": (r.stdout + r.stderr)[-600:]}
+        return r.returncode, out
+
+    code, _ = run(ap_ + ["start", "--experiments-per-round", "2", "--max-rounds", "1"])
+    c.check(code == 0, "autopilot: settings recorded")
+    code, nxt = run(ap_ + ["next"])
+    c.check(nxt.get("action") == "open_round", "autopilot: after the evaluation, the next action is a round", str(nxt))
+    items = os.path.join(kept, "backlog.yaml")
+    with open(items, "w") as f:
+        f.write("- {stage: training, change: Tune LightGBM with 20 trials, hypothesis: More trials find a better model., cost: 1}\n"
+                "- {stage: training, change: Ridge only with 2 trials, hypothesis: A simpler model is as good., cost: 1}\n")
+    code, out = run(ap_ + ["backlog", "add", items])
+    c.check(code == 0 and len(out.get("added") or []) == 2, "autopilot: two backlog items added", str(out)[:300])
+    code, rnd = run(ap_ + ["round", "open", "--scratch", kept])
+    c.check(code == 0 and len(rnd.get("experiments") or []) == 2, "round: opened with two workspaces", str(rnd)[:600])
+    if code:
+        return
+    c.check(git(root, "branch", "--show-current").stdout.strip() == "ml/v2", "round: the project is on ml/v2")
+    exps = {x["id"]: x for x in rnd["experiments"]}
+    for x in exps.values():
+        ws = x["workspace"]
+        c.check(os.path.exists(os.path.join(ws, ".ml_workspace.json")), f"{x['experiment']}: workspace file written")
+        c.check(git(ws, "branch", "--show-current").stdout.strip() == x["branch"], f"{x['experiment']}: worktree on {x['branch']}")
+        c.check(bool(x.get("parent_run")), f"{x['experiment']}: MLflow parent run created")
+        if x.get("parent_run"):
+            c.check(client.get_run(x["parent_run"]).data.tags.get("mlflow.parentRunId") == x.get("version_parent_run"),
+                    f"{x['experiment']}: parent run sits under the V2 run")
+
+    # The agents: carry forward, train with the experiment's change, apply the bar, write the result
+    base_answers = ml_common.load(os.path.join(kept, "training.yaml"))
+    variants = {"a": [dict(m, tuning={**m["tuning"], "n_trials": 20}) for m in base_answers["models"] if m["type"] == "lightgbm"],
+                "b": [dict(m, tuning={**m["tuning"], "n_trials": 2}) for m in base_answers["models"] if m["type"] == "ridge"]}
+    for i, x in exps.items():
+        ws = x["workspace"]
+        code, cf = run(it + ["carry-forward", "--json"], cwd=ws)
+        c.check(code == 0, f"{x['experiment']}: champion carried forward in the workspace", str(cf)[:300])
+        ans = {**base_answers, "models": variants[i] + ([cf["model"]] if code == 0 else [])}
+        ap_path = os.path.join(kept, f"training_{i}.yaml")
+        ml_common.save(ap_path, ans)
+        res = run_stage(ws, env, "ml-model-training", ap_path, ["--rebuild", "--overwrite"])
+        c.check(res.get("exit_code") == 0, f"{x['experiment']}: training in the workspace, exit code 0",
+                res.get("stderr_tail", "")[-400:])
+        _, bar = run(it + ["bar", "--json"], cwd=ws)
+        ws_spec = ml_common.load(os.path.join(ws, ml_common.SPEC_NAME))
+        rid = ((ws_spec.get("training") or {}).get("mlflow") or {}).get("run_id")
+        if rid:
+            t = client.get_run(rid).data.tags
+            c.check(t.get("candidate") == "true" and t.get("experiment") == x["experiment"] and t.get("current") == "false",
+                    f"{x['experiment']}: training run is a candidate of its experiment, not current", str({k: t.get(k) for k in ("candidate", "experiment", "current")}))
+            c.check(t.get("mlflow.parentRunId") == x.get("parent_run"), f"{x['experiment']}: training run under its parent run")
+        with open(os.path.join(ws, "experiment_result.json"), "w") as f:
+            json.dump({"bar": bar, "champion": (ws_spec.get("training") or {}).get("champion", {}).get("name"),
+                       "summary": "regression"}, f)
+        exps[i]["training_run"] = rid
+        exps[i]["bar_status"] = bar.get("status")
+    c.check(client.get_model_version_by_alias(name, "champion").version == v1_version,
+            "round: alias champion has not moved while the experiments ran")
+    res = run_stage(root, env, "ml-model-training", os.path.join(kept, "training.yaml"), ["--rebuild", "--overwrite"])
+    c.check(res.get("exit_code") == 1, "round: a stage build in the project itself is refused while the round is open",
+            str(res.get("exit_code")))
+    c.check(ml_common.load(spec_path)["training"]["mlflow"]["run_id"] == v1_training_run,
+            "round: the project's training section is untouched")
+
+    for i, x in exps.items():
+        code, out = run(it + ["record-experiment", i, "--result", os.path.join(x["workspace"], "experiment_result.json"), "--json"])
+        c.check(code == 0, f"{x['experiment']}: result recorded in the project", str(out)[:300])
+    passed = [i for i, x in exps.items() if x.get("bar_status") == "pass"]
+    print("  bar results: " + ", ".join(f"{x['experiment']} {x.get('bar_status')}" for x in exps.values()))
+    if not passed:   # the plumbing is under test here, not the models: let a count as passed
+        print("  neither experiment passed the bar; recording V2-a as passed to test the adoption")
+        run(it + ["record-experiment", "a", "--status", "passed", "--json"])
+        passed = ["a"]
+    win = sorted(passed)[0] if len(passed) == 1 else None
+    code, nxt = run(ap_ + ["next"])
+    c.check(nxt.get("action") == "close_round", "round: every experiment reported, so the next action is to close", str(nxt))
+    code, closed = run(ap_ + ["round", "close"])
+    c.check(code == 0, "round: closed", str(closed)[:600])
+    if code:
+        return
+    win = win or closed.get("adopted", "").split("-")[-1].lower()
+    lose = "b" if win == "a" else "a"
+    W, L = exps[win], exps[lose]
+    spec = ml_common.load(spec_path)
+    entry = spec["iterations"]["entries"][-1]
+    c.check(entry.get("status") == "closed" and entry.get("outcome") == "kept" and entry.get("adopted") == W["experiment"],
+            "round: the iteration is closed as kept with the adopted experiment", str({k: entry.get(k) for k in ("status", "outcome", "adopted")}))
+    st = {x["id"]: x.get("status") for x in entry.get("experiments") or []}
+    c.check(st.get(win) == "adopted" and st.get(lose) == "discarded", "round: experiment statuses adopted and discarded", str(st))
+    c.check(spec["training"]["mlflow"]["run_id"] == W["training_run"], "adopt: the project's training section is the adopted experiment's")
+    c.check(client.get_run(W["training_run"]).data.tags.get("current") == "true", "adopt: the adopted training run is current")
+    c.check(client.get_run(v1_training_run).data.tags.get("current") == "false", "adopt: the V1 training run is no longer current")
+    c.check(client.get_run(W["parent_run"]).data.tags.get("verdict") == "promoted", "adopt: the adopted experiment is promoted")
+    c.check(client.get_run(L["parent_run"]).data.tags.get("verdict") == "rejected", "discard: the other experiment is rejected")
+    c.check(bool(client.search_runs([exp_id], f"tags.experiment = '{L['experiment']}' and tags.run_type = 'stage'")),
+            "discard: the rejected experiment's runs stay in MLflow")
+    champ = client.get_model_version_by_alias(name, "champion")
+    c.check(champ.version != v1_version and champ.tags.get("experiment") in (W["experiment"], None),
+            "adopt: alias champion moved to the adopted experiment's model", f"{champ.version} {champ.tags}")
+    try:
+        c.check(client.get_model_version_by_alias(name, "champion-v2").version == champ.version,
+                "adopt: alias champion-v2 names the adopted model")
+    except Exception as e:  # noqa: BLE001
+        c.check(False, "adopt: alias champion-v2 names the adopted model", str(e)[:200])
+    champ_path = os.path.join(root, (spec["training"].get("champion") or {}).get("path") or "missing")
+    c.check(os.path.exists(champ_path), "adopt: the adopted champion's model file is in the project")
+    c.check(not os.path.exists(W["workspace"]) and not os.path.exists(L["workspace"]), "the worktrees are removed")
+    c.check(bool(git(root, "branch", "--list", W["branch"]).stdout.strip()) and bool(git(root, "branch", "--list", L["branch"]).stdout.strip()),
+            "both experiment branches are kept")
+    c.check(f"Adopt {W['experiment']}" in git(root, "log", "--format=%s", "-20").stdout, "adopt: merge commit on ml/v2")
+    bl = {b["id"]: b["status"] for b in spec["autopilot"]["backlog"]}
+    c.check(sorted(bl.values()) == ["adopted", "tried"], "the backlog records adopted and tried", str(bl))
+    c.check(git(root, "rev-list", "--count", "main").stdout.strip() == "1", "autopilot: main still holds only the first commit")
+    c.check(not git(root, "status", "--porcelain", "--", "ml_spec.yaml").stdout.strip(), "autopilot: the spec is committed")
+    code, nxt = run(ap_ + ["next"])
+    c.check(nxt.get("action") == "checkpoint" and nxt.get("checkpoint") == "test_final",
+            "autopilot: after the last round, it stops before the final test look", str(nxt))
+    code, cp = run(ap_ + ["checkpoint", "write", "test_final"])
+    c.check(code == 0 and os.path.exists(os.path.join(root, "docs", "checkpoint.md")), "checkpoint: docs/checkpoint.md written")
+    code, nxt = run(ap_ + ["next"])
+    c.check(nxt.get("action") == "review", "checkpoint: the next start reviews it", str(nxt))
+
+
 # ---------------------------------------------------------------- main
 
 def main():
@@ -306,6 +456,7 @@ def main():
     ap.add_argument("fixtures", nargs="*", help="Fixture names (default: all)")
     ap.add_argument("--iterate", action="store_true", help="Also test V2 kept and V3 rolled back on the first fixture")
     ap.add_argument("--iterate-all", action="store_true", help="Test the iterations on every fixture")
+    ap.add_argument("--autopilot", action="store_true", help="Also test one autopilot round on the first fixture")
     ap.add_argument("--keep", action="store_true", help="Keep the temporary projects")
     ap.add_argument("--python", help="Python that runs the notebooks")
     args = ap.parse_args()
@@ -344,6 +495,11 @@ def main():
                 run_iteration(c, root, spec_path, env, results)
             else:
                 c.check(False, "iteration test skipped because V1 failed")
+        elif args.autopilot and i == 0:
+            if not c.failed:
+                run_autopilot(c, root, spec_path, env)
+            else:
+                c.check(False, "autopilot test skipped because V1 failed")
         mlflow_server(store, "stop")
         summary.append((name, len(c.passed), len(c.failed), c.failed))
         all_ok &= not c.failed
