@@ -34,7 +34,9 @@ PY ${CLAUDE_SKILL_DIR}/scripts/reconcile.py check
 PY ${CLAUDE_SKILL_DIR}/scripts/reconcile.py inventory --out <scratch folder>/notes.json
 ```
 
-`check` lists settings that disagree by fixed rules: the target, date column, or entity differing between stages; columns excluded in the framing but used as features; the primary metric or its k differing between the framing and the baseline without a note saying why; a V1 bar that names a model that is not a baseline; a gap shorter than the label delay; lags shorter than the horizon; ML being built after the business framing said it is not needed; and open questions for stages that are finished.
+`check` lists settings that disagree by fixed rules: the target, date column, or entity differing between stages; columns excluded in the framing but used as features; the primary metric or its k differing between the framing and the baseline without a note saying why; a V1 bar that names a model that is not a baseline; a gap shorter than the label delay; lags shorter than the horizon; ML being built after the business framing said it is not needed; a system design drafted for another champion, a champion/challenger gate on another metric than the framing's primary metric, or model inputs the design does not serve; and open questions for stages that are finished.
+
+The system design has no notebook, so this skill does not edit it. For a conflict in the `system` section, tell the user to rerun `/ml-system-design`, which asks only about the parts that changed.
 
 `inventory` prints every note by stage, with where it lives (a notebook cell, a spec field, or a shared list) and when it was written.
 

@@ -14,6 +14,7 @@
 | `data` | ml-problem-framing (date, ID, and excluded columns), ml-data-discovery and ml-eda-report (`sources`) | all |
 | `eda` | ml-eda-report | split and later skills |
 | `split`, `features`, `baseline`, `training`, `evaluation` | the skill for that stage | later skills |
+| `system` | ml-system-design (`scripts/design.py`, no notebook) | ml-status, the build skills |
 | `review` | ml-review | ml-status |
 | `tracking` | ml-project-setup | every stage that logs to MLflow, ml-status, ml-review |
 | `version` | ml-project-setup (V1), then ml-iterate | every stage that logs or commits, ml-status |
@@ -42,6 +43,7 @@ Each workflow step writes one numbered notebook, and the notebook is the record 
 | 9. baseline | ml-baseline-model | `07_baseline.ipynb`, and `baseline_cv_results.parquet` and `baseline_oof_predictions.parquet` in `data/processed` | `baseline` is filled in |
 | 10. training | ml-model-training | `08_training.ipynb`, `training_runs.parquet` and `training_oof_predictions.parquet` in `data/processed`, and `models/champion_<name>.joblib` | `training` is filled in |
 | 11. evaluation | ml-offline-evaluation | `09_evaluation.ipynb` | `evaluation` is filled in |
+| 12. system | ml-system-design | `docs/system_design.md` (no notebook), and `answers/11_system.yaml` | `system` is filled in |
 
 Notebooks live in the `notebooks` folder. When a person has edited a notebook and a skill would replace it, the skill stops and offers to replace it or to write the next version, such as `03_problem_framing_v2.ipynb`.
 
@@ -294,6 +296,23 @@ Written by `09_evaluation.ipynb` each time it runs. The whole section is replace
 | `test_opened` | Every time the test set was scored: `at`, `champion`, and `data_version`. A later run with another champion or data version warns that the test score may be optimistic. |
 | `decision` | Always null when written by the notebook. The decision (go, iterate, or no go) is the user's and is recorded in `decisions`. |
 | `run_at` | When it ran. |
+
+## system
+
+Written by ml-system-design through `scripts/design.py`, never by a notebook. The whole section is replaced on each build. The design document `docs/system_design.md` is generated from this section and the reasoning in `answers/11_system.yaml`.
+
+| Field | Meaning |
+|---|---|
+| `status` | `draft` or `confirmed`. Confirmed needs all twelve components and no blocks. |
+| `platform` | `kind` (`default`, `platform`, or `neutral`, the stacks in the skill's `reference/defaults.yaml`) and `name` for a platform, such as `hopsworks`. |
+| `entry` | How the design passed the entry rule: `outcome` (`go`, `no_go_build` for an exploratory project whose matching answer still builds the system, or `override`), `answer`, `reason`, and `evaluation_decision`, the decision text it started from. |
+| `champion` | The champion (`training.champion.name`) the design was drafted for. A different champion marks the champion dependent parts out of date. |
+| `components` | One entry per component: `ingestion`, `data_validation`, `features`, `training`, `registry`, `inference`, `serving`, `label_feedback`, `monitoring`, `failure_handling`, `orchestration`, `testing`. Each has `needed`, `tool`, `settings`, and `reason`. Checked settings: `ingestion.settings.frequency`, `features.settings.served_inputs` (every name in `features.inputs`), `registry.settings.gate` (`metric`, the framing's primary metric; `margin` in the metric's units, at least the champion's CV std; `window_days`; `promotion`, `manual` or `auto`), `registry.settings.decides_champion` (required when the platform has its own registry), `inference.settings.mode` (`batch` or `online`) and `schedule` (`hourly`, `daily`, `weekly`, `monthly`, or `on_request`), `failure_handling.settings.fallback`. |
+| `champion_dependent` | The components redrafted when the champion changes: features, registry, monitoring, failure_handling. |
+| `warnings_accepted` | Judgement calls kept against a warning: `check` and `reason`. Each is also recorded in `decisions`. |
+| `risks` | `problem` and `resolution`. |
+| `doc`, `doc_hash` | The design document's path, and a hash of it as written, so a hand edit is noticed. |
+| `run_at` | When it was built. |
 
 ## review
 

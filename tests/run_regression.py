@@ -19,6 +19,9 @@ stages), it:
    discards the rest, and checks the worktrees, branches, MLflow candidates, verdicts and aliases, and the spec;
 6. for an exploratory fixture (business.mode exploratory), checks that the model card frames the result by the
    learning question.
+7. with --system (the first fixture only), records a go decision on the evaluation, builds system design answers
+   from the project's own spec, runs ml-system-design with `--json`, and checks the commit, the document, the
+   system section, and that ml-status shows the step as done.
 
 The real MLflow server and ~/.mlflow are never touched: each fixture gets a throwaway server (tools/mlflow_server.py
 with its own MLFLOW_HOME in the temporary folder and a free port), and the projects log to it over HTTP with the
@@ -304,6 +307,50 @@ def run_iteration(c, root, spec_path, env, results):
     c.check(git(root, "rev-list", "--count", "main").stdout.strip() == "1", "V3: main still holds only the first commit")
 
 
+def run_system_design(c, root, spec_path, env):
+    """Design the system for the evaluated V1 champion, as a person would after a go decision."""
+    import ml_common
+    import yaml
+    spec = ml_common.load(spec_path)
+    spec["decisions"] = list(spec.get("decisions") or []) + [
+        {"date": "2026-10-20", "stage": "evaluation", "decision": "Go: ship V1.", "reason": "Regression test."}]
+    ml_common.save(spec_path, spec)
+    example = ml_common.load(os.path.join(SKILLS, "ml-system-design", "templates", "system_answers.example.yaml"))
+    comps = example["components"]
+    comps["features"]["settings"]["served_inputs"] = [i["name"] for i in (spec.get("features") or {}).get("inputs") or []]
+    gate = comps["registry"]["settings"]["gate"]
+    gate["metric"] = ml_common.primary_metric(spec)
+    gate["margin"] = round(2 * float(((spec.get("training") or {}).get("champion") or {}).get("std") or 0.01), 6)
+    comps["inference"]["settings"] = {"mode": "batch", "schedule": "weekly"}
+    comps["ingestion"]["settings"]["frequency"] = "weekly"
+    answers = {**example, "platform": {"kind": "default"}, "warnings_accepted": [], "open_questions": []}
+    path = os.path.join(root, "system_answers.yaml")
+    with open(path, "w") as f:
+        yaml.safe_dump(answers, f, sort_keys=False)
+    script = os.path.join(SKILLS, "ml-system-design", "scripts", "design.py")
+    r = subprocess.run([env["PY"], script, path, "--json"], cwd=root, capture_output=True, text=True, env=env)
+    try:
+        out = json.loads(r.stdout.strip().splitlines()[-1])
+    except (ValueError, IndexError):
+        out = {"exit_code": r.returncode}
+    c.check(out.get("exit_code") == 0, "system: design.py exit code 0", r.stderr[-800:])
+    spec = ml_common.load(spec_path)
+    sysd = spec.get("system") or {}
+    c.check(sysd.get("status") == "confirmed" and sysd.get("champion") == spec["training"]["champion"]["name"],
+            "system: section written for the current champion", str(sysd)[:300])
+    c.check(os.path.isfile(os.path.join(root, "docs", "system_design.md")), "system: docs/system_design.md written")
+    c.check(os.path.isfile(os.path.join(root, "answers", "11_system.yaml")), "system: answers kept")
+    log = git(root, "log", "--format=%s", "-1").stdout
+    c.check("V1 system: built by ml-system-design" in log, "system: committed on ml/v1", log)
+    st = subprocess.run([env["PY"], os.path.join(SKILLS, "ml-status", "scripts", "status.py"), "--json"], cwd=root,
+                        capture_output=True, text=True, env=env)
+    try:
+        steps = {s["step"]: s["state"] for s in json.loads(st.stdout)["steps"]}
+    except (ValueError, KeyError):
+        steps = {}
+    c.check(steps.get("system") == "done", "system: ml-status shows the step as done", str(steps.get("system")))
+
+
 def run_autopilot(c, root, spec_path, env):
     """One round of two experiments, as ml-autopilot and two ml-experimenter agents would run it, without a model in
     the loop: the agents' work is the stage scripts with kept answers."""
@@ -506,6 +553,7 @@ def main():
     ap.add_argument("--iterate", action="store_true", help="Also test V2 kept and V3 rolled back on the first fixture")
     ap.add_argument("--iterate-all", action="store_true", help="Test the iterations on every fixture")
     ap.add_argument("--autopilot", action="store_true", help="Also test one autopilot round on the first fixture")
+    ap.add_argument("--system", action="store_true", help="Also test ml-system-design on the first fixture")
     ap.add_argument("--keep", action="store_true", help="Keep the temporary projects")
     ap.add_argument("--python", help="Python that runs the notebooks")
     args = ap.parse_args()
@@ -549,6 +597,11 @@ def main():
                 run_autopilot(c, root, spec_path, env)
             else:
                 c.check(False, "autopilot test skipped because V1 failed")
+        if args.system and i == 0:
+            if not c.failed:
+                run_system_design(c, root, spec_path, env)
+            else:
+                c.check(False, "system design test skipped because V1 failed")
         mlflow_server(store, "stop")
         summary.append((name, len(c.passed), len(c.failed), c.failed))
         all_ok &= not c.failed

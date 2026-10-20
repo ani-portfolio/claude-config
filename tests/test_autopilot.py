@@ -97,6 +97,13 @@ def test_evaluated_opens_a_round():
     assert a.next_action(_evaluated(_spec()))["action"] == "open_round"
 
 
+def test_system_design_is_never_run_by_the_autopilot():
+    s = _evaluated(_spec())
+    assert m.next_step(s)[0] == "system"
+    act = a.next_action(s)
+    assert act["action"] != "run_stage" and act.get("skill") != "ml-system-design", act
+
+
 def test_round_launches_waits_then_advances():
     s = _evaluated(_spec())
     s["autopilot"]["settings"]["max_parallel"] = 2

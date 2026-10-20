@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as _dt
+import hashlib
 import json
 import os
 import sys
@@ -96,6 +97,9 @@ def expected_outputs(spec, root):
     for stage in ("split", "features", "baseline", "training", "evaluation"):
         for name, p in ((spec.get(stage) or {}).get("files") or {}).items():
             out[stage].append((os.path.basename(p), j(root, p)))
+    # The system design writes no notebook; its record is the design document.
+    sysd = spec.get("system") or {}
+    out["system"] = [("system design", j(root, sysd["doc"]) if sysd.get("doc") else j(paths["docs"], "system_design.md"))]
     code = ((spec.get("features") or {}).get("code") or {})
     for key in ("features", "custom"):
         if code.get(key):
@@ -153,6 +157,23 @@ def stale_results(spec, root):
         before, after = _ts((runs.get(prev) or {}).get("run_at")), _ts((runs.get(stage) or {}).get("run_at"))
         if before and after and before > after and spec.get(stage):
             notes.append((stage, f"{prev_label[0].upper() + prev_label[1:]} ran again after this step. Rerun {skill}."))
+    # The system design has no notebook: compare with the evaluation, the champion, and its own document.
+    sysd = spec.get("system") or {}
+    if sysd:
+        eval_t, sys_t = _ts((runs.get("evaluation") or {}).get("run_at")), _ts(sysd.get("run_at"))
+        champ = ((spec.get("training") or {}).get("champion") or {}).get("name")
+        if sysd.get("champion") and champ and sysd["champion"] != champ:
+            notes.append(("system", f"The champion changed from {sysd['champion']} to {champ} after the system was "
+                                    "designed. Rerun ml-system-design for the parts that depend on it."))
+        elif eval_t and sys_t and eval_t > sys_t:
+            notes.append(("system", "The evaluation ran again after the system was designed. Rerun ml-system-design "
+                                    "for the parts that depend on the champion."))
+        doc = os.path.join(root, sysd.get("doc") or "")
+        if sysd.get("doc_hash") and os.path.isfile(doc):
+            with open(doc, encoding="utf-8") as f:
+                if hashlib.sha256(f.read().encode("utf-8")).hexdigest()[:16] != sysd["doc_hash"]:
+                    notes.append(("system", f"`{sysd['doc']}` was edited by hand, and the next build would replace "
+                                            "it. Move the edits into `answers/11_system.yaml` and rerun ml-system-design."))
     return notes
 
 
@@ -242,7 +263,7 @@ def collect(spec, path):
         "conflicts": ml_common.consistency_checks(spec),
         "review": review_state(spec),
         "iteration": iteration_state(spec),
-        "eval_decision": (spec.get("evaluation") or {}).get("decision"),
+        "eval_decision": ml_common.evaluation_decision(spec),
         "tracking": tracking_state(spec),
         "version": version_state(spec, root),
     }
@@ -453,12 +474,15 @@ def print_next(r):
         s = r["iteration"]["remaining"][0]
         print(f"**Next:** `/{ml_common.STAGE_SKILL[s]}`, the next stage of iteration {r['iteration']['id']} "
               "(see `/ml-iterate`).")
+    elif n["step"] == "system" and not r.get("eval_decision") and not r.get("iteration"):
+        print("**Next:** record a go, iterate, or no go decision on the evaluation (its notebook's decisions cell). "
+              "After a go, design the system with `/ml-system-design`; to improve the model, use `/ml-iterate`.")
     elif not n["step"] and not r.get("eval_decision") and not r.get("iteration"):
         print("**Next:** every step is done. Record a go, iterate, or no go decision on the evaluation; to improve the "
               "model, use `/ml-iterate`.")
     elif not n["step"]:
         print("**Next:** every step is done.")
-    elif r["ml_needed"] == "no" and n["step"] in ("split", "features", "baseline", "training", "evaluation"):
+    elif r["ml_needed"] == "no" and n["step"] in ("split", "features", "baseline", "training", "evaluation", "system"):
         print("**Next:** none in the ML workflow. The business framing concluded that ML is not needed. If the "
               "question is whether a change worked, use the A/B testing skills: `/ab-project-setup`, then "
               "`/ab-test-framing`.")

@@ -150,10 +150,12 @@ This project uses the ML project skills. `ml_spec.yaml` at the project root is t
 decision: read it before starting any modelling work, and never contradict it without asking the user.
 * Steps, in order: ml-project-setup, ml-business-framing (the mode and two anchors, before the data),
   ml-data-discovery, ml-business-framing again (the rest, drafted from the data), ml-problem-framing, ml-eda-report,
-  ml-train-test-split, ml-feature-engineering, ml-baseline-model, ml-model-training, ml-offline-evaluation.
+  ml-train-test-split, ml-feature-engineering, ml-baseline-model, ml-model-training, ml-offline-evaluation,
+  ml-system-design (after a go decision: the design of the end to end system).
 * Each step writes one numbered notebook in `notebooks/`: `01_business_framing.ipynb`, `02_data_discovery.ipynb`,
   `03_problem_framing.ipynb`, `04_eda_<dataset>.ipynb`, `05_split.ipynb`, `06_features.ipynb`, `07_baseline.ipynb`,
-  `08_training.ipynb`, `09_evaluation.ipynb`. The notebook is the record of that step.
+  `08_training.ipynb`, `09_evaluation.ipynb`. The notebook is the record of that step. ml-system-design is the
+  exception: it writes `docs/system_design.md` from `answers/11_system.yaml`, with no notebook.
 * Cells marked *Decision* hold the answers. To change a decision, edit that cell and run the whole notebook,
   which writes the answers to `ml_spec.yaml`. Do not edit the spec sections those notebooks own by hand.
 * The data dictionary is `docs/data_dictionary.yaml`. Check a column's meaning and timing there before using it.
@@ -251,8 +253,9 @@ ml_spec.yaml       shared project spec: framing, data findings, and decisions
 The project follows the ML project skills: ml-project-setup, ml-business-framing (the mode and two anchors),
 ml-data-discovery, ml-business-framing again (the rest, drafted from the data), ml-problem-framing, ml-eda-report,
 and then ml-train-test-split, ml-feature-engineering, ml-baseline-model,
-ml-model-training, and ml-offline-evaluation. Each step writes one numbered notebook (`01_business_framing.ipynb`
-to `09_evaluation.ipynb`) that holds its reasoning, decisions, and checks. Running a notebook records its
+ml-model-training, ml-offline-evaluation, and ml-system-design. Each step up to the evaluation writes one numbered
+notebook (`01_business_framing.ipynb` to `09_evaluation.ipynb`) that holds its reasoning, decisions, and checks;
+the system design is written to `docs/system_design.md`. Running a notebook records its
 decisions in `ml_spec.yaml`. Run `/ml-status` in Claude Code to see progress.
 
 ## Data

@@ -47,6 +47,9 @@ SKILL = "ml-autopilot"
 # The stages the agent runs without a person, in order. Checkpoints sit before the business and ML framing are
 # confirmed and before every opening of the test set.
 UNATTENDED = {"discovery", "eda", "split", "features", "baseline", "training"}
+# Steps the agent never runs: they need a person (ml-system-design commits accounts, keys, and money). The rounds
+# start as if they were done, and the person runs them later.
+PERSON_ONLY = {"system"}
 # Backlog items in these stages change the folds, so each one is screened in a round of its own.
 UPSTREAM = {"setup", "business", "discovery", "framing", "eda", "split"}
 # Stages before training: taking one of their changes out of a combination is scored with the combination's model
@@ -136,6 +139,8 @@ def next_action(spec):
         return {"action": "ask_goal", "skill": "ml-business-framing",
                 "why": "The mode, the two anchors, and the run's settings come from the person before the data."}
     step, skill, how = ml_common.next_step(spec)
+    if step in PERSON_ONLY:
+        step, skill, how = None, None, None
     if step in ("business", "framing"):
         cp = _checkpoint(spec, step)
         if _drafted(spec, step) and not (cp and cp.get("status") == "cleared"):

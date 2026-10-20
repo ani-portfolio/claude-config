@@ -494,7 +494,7 @@ def run_existing(path, timeout=1800):
 
 # Flags that only print facts. A run with one of them writes no notebook, so its answers are not saved.
 INFO_FLAGS = {"--suggest", "--check", "--list-columns", "--suggest-locations", "--kernel-status", "--list-extras",
-              "--status", "--dry-run", "--no-run", "--help", "-h"}
+              "--status", "--dry-run", "--no-run", "--help", "-h", "--context"}
 EXIT_REASONS = {0: "ok", 1: "failed", 2: "edited_notebook", 3: "edited_code"}
 
 

@@ -1,0 +1,95 @@
+# Example answers file: design.py <this file>. It writes the system section of ml_spec.yaml and
+# docs/system_design.md. Use exactly these keys. A component left out is shown as "not decided" (draft only).
+status: confirmed            # draft or confirmed; confirmed needs all twelve components and no blocks
+platform:
+  kind: platform             # default, platform, or neutral (the stacks in reference/defaults.yaml)
+  name: hopsworks            # the platform's stack name, when kind is platform
+entry:
+  outcome: go                # go, no_go_build (exploratory only), or override
+  answer: null               # no_go_build only: the business answer_actions entry that matches, word for word
+  reason: null               # override only: why the design goes ahead anyway
+components:
+  ingestion:
+    needed: true
+    tool: Hopsworks job (Python) writing to a feature group
+    settings: {frequency: daily, source: Open-Meteo archive API, limits: "free tier, about 10,000 calls a day"}
+    reason: New observations arrive once a day.
+  data_validation:
+    needed: true
+    tool: Great Expectations suites attached to the feature groups
+    settings: {checks: [schema, value ranges, missing days, freshness], on_failure: reject the insert and alert}
+    reason: A bad upstream day must not become features.
+  features:
+    needed: true
+    tool: Hopsworks feature groups and a feature view
+    settings:
+      served_inputs: [temp_max_lag_1, temp_max_roll_7, day_of_year]   # every name in features.inputs
+      backfill: recompute from the raw feature group when a definition changes
+    reason: One feature view serves training data and online vectors, so they cannot drift apart.
+  training:
+    needed: true
+    tool: Hopsworks job creating training data from the feature view
+    settings: {trigger: weekly, window: last 730 days}
+    reason: Seasons shift slowly; weekly retraining is enough.
+  registry:
+    needed: true
+    tool: Hopsworks model registry
+    settings:
+      decides_champion: Hopsworks registry for deployment; MLflow keeps experiments, linked by MLflow run id
+      gate: {metric: MAE, margin: 0.15, window_days: 28, promotion: manual}   # metric = the framing's primary metric
+      lineage: model version, feature view version, training dataset version, MLflow run id
+    reason: The gate compares the challenger with the champion on the last 28 days of live labels.
+  inference:
+    needed: true
+    tool: KServe deployment reading the online feature store
+    settings: {mode: online, schedule: on_request}   # mode batch or online; schedule hourly, daily, weekly, monthly, on_request
+    reason: Building online inference is the project's learning goal.
+  serving:
+    needed: true
+    tool: Hopsworks model deployment (KServe)
+    settings: {environments: [dev, prod], secrets: Hopsworks API key in the environment, rollback: previous deployment version}
+    reason: Versioned deployments make rollback one step.
+  label_feedback:
+    needed: true
+    tool: Hopsworks job joining actuals into a predictions feature group
+    settings: {label_arrives: next day, join: city and date}
+    reason: Tomorrow's maximum is known the day after.
+  monitoring:
+    needed: true
+    tool: Hopsworks feature monitoring plus Evidently
+    settings: {data_drift: PSI over 0.2 on any input, performance: 7 day MAE 20% above the evaluation MAE, alerts: email}
+    reason: Thresholds start from the evaluation's results.
+  failure_handling:
+    needed: true
+    tool: Fallback in the predictor script
+    settings: {fallback: persistence (today's maximum), target: a forecast for every city by 06:00 local}
+    reason: Persistence is the baseline the model must beat, so it is a safe answer when the model fails.
+  orchestration:
+    needed: true
+    tool: Hopsworks jobs with schedules
+    settings: {order: [ingestion, features, label feedback, monitoring, training]}
+    reason: Each pipeline is a job with its own schedule.
+  testing:
+    needed: true
+    tool: pytest
+    settings: {unit: feature functions and the gate rule, component: feature view and deployment, system: raw data to a served forecast}
+    reason: The skew between offline and online features is the costliest silent bug.
+# Accepted judgement calls: the check id from design.py --check, with the reason. Recorded in decisions.
+warnings_accepted:
+  - check: online for a batch cadence
+    reason: Building online inference is the learning goal, so the simpler batch job is not used on purpose.
+# One short paragraph per key (platform, entry, and any component), shown in the document above each component.
+reasoning:
+  platform: The person wants to use Hopsworks as much as possible, so every component starts from its stack.
+  features: The feature view is the single definition of the features for training and serving.
+risks:
+  - problem: The Open-Meteo free tier limits calls per minute and per hour.
+    resolution: Ingestion fetches one city per request, paced, with a resumable cache.
+assumptions:
+  - The Hopsworks free tier is enough for 50 cities and one forecast a day.
+open_questions:
+  - question: Which Hopsworks project and cluster will host the system?
+    stage: system
+decisions:
+  - decision: Use Hopsworks as the platform for every component it covers.
+    reason: The person chose it at the start of the design.

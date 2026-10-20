@@ -1,0 +1,64 @@
+# Tool defaults for ml-system-design, one stack per platform choice. Edit freely: the skill reads this file every
+# time it drafts a design, so changing a default here changes the next draft. The person can still override every
+# component during the interview.
+#
+# Each stack has:
+#   label         how the choice is shown to the person
+#   has_registry  true when the platform has its own model registry; the skill then asks which registry decides
+#                 the champion (MLflow, the platform's, or both linked by the MLflow run id)
+#   components    one entry per component (the twelve keys below), each with a default tool and a short note
+
+order: [ingestion, data_validation, features, training, registry, inference, serving, label_feedback, monitoring,
+        failure_handling, orchestration, testing]
+
+stacks:
+  default:
+    label: Default stack (simple, runs on one machine)
+    has_registry: false
+    components:
+      ingestion: {tool: "Python script in src/ (requests or the source's client)", note: "Writes raw snapshots to data/raw with the request kept beside them."}
+      data_validation: {tool: "pandera schemas", note: "Schema, ranges, missing days, and freshness, checked before features are written."}
+      features: {tool: "Parquet offline store + SQLite online store", note: "One src/features.py used for both training and serving, so features cannot drift apart."}
+      training: {tool: "Python script reusing the project's training code", note: "Refits the champion settings on a rolling window."}
+      registry: {tool: "MLflow model registry with aliases (champion, challenger)", note: "The gate moves the champion alias."}
+      inference: {tool: "Batch scoring script, or FastAPI for online", note: "Logs every prediction with the model version and feature values."}
+      serving: {tool: "FastAPI with uvicorn, in Docker", note: "Loads the model by alias, so promotion needs no redeploy."}
+      label_feedback: {tool: "Daily job joining actuals to the prediction log", note: "Writes a scored table for monitoring and the gate."}
+      monitoring: {tool: "Evidently reports plus a scheduled check", note: "Data drift, prediction drift, live error, and job health."}
+      failure_handling: {tool: "Fallback rule in the serving code", note: "Serves the best simple baseline when features are stale or the model fails."}
+      orchestration: {tool: "cron (or Prefect for retries and a UI)", note: "Runs ingestion, features, scoring, labels, and monitoring in order."}
+      testing: {tool: "pytest (tests/unit, tests/component, tests/system)", note: "Unit for functions, component per part, system end to end."}
+
+  hopsworks:
+    label: Hopsworks (use the platform as much as possible)
+    has_registry: true
+    components:
+      ingestion: {tool: "Hopsworks job (Python) writing to a feature group", note: "Raw data lands in a feature group with event time."}
+      data_validation: {tool: "Great Expectations suites attached to the feature groups", note: "Hopsworks validates every insert and can reject bad data."}
+      features: {tool: "Hopsworks feature groups and feature views (offline and online store)", note: "The feature view serves the same features online and for training data."}
+      training: {tool: "Hopsworks job creating training data from the feature view", note: "Training datasets are versioned with the feature view."}
+      registry: {tool: "Hopsworks model registry", note: "Ask which registry decides the champion: MLflow keeps the experiments."}
+      inference: {tool: "Hopsworks batch job, or a KServe deployment for online", note: "Online inference reads the feature view's online store."}
+      serving: {tool: "Hopsworks model deployment (KServe)", note: "Versioned deployments with a predictor script."}
+      label_feedback: {tool: "Hopsworks job joining actuals into a predictions feature group", note: "Predictions and actuals share the entity and event time."}
+      monitoring: {tool: "Hopsworks feature monitoring plus Evidently for model performance", note: "Feature statistics come from the platform; live error from the joined labels."}
+      failure_handling: {tool: "Fallback in the predictor script", note: "Serves the best simple baseline when the feature vector is stale or missing."}
+      orchestration: {tool: "Hopsworks jobs with schedules (or Airflow through the Hopsworks operator)", note: "Each pipeline is a job with its own schedule."}
+      testing: {tool: "pytest (tests/unit, tests/component, tests/system)", note: "Component tests run against a Hopsworks test project."}
+
+  neutral:
+    label: Tool neutral (roles only, tools decided later)
+    has_registry: false
+    components:
+      ingestion: {tool: "To be chosen", note: "Fetches new raw data on a schedule."}
+      data_validation: {tool: "To be chosen", note: "Checks new data before it becomes features."}
+      features: {tool: "To be chosen", note: "Computes features the same way for training and serving."}
+      training: {tool: "To be chosen", note: "Retrains on new data."}
+      registry: {tool: "To be chosen", note: "Holds model versions and the champion."}
+      inference: {tool: "To be chosen", note: "Produces predictions and logs them."}
+      serving: {tool: "To be chosen", note: "Makes predictions available to users."}
+      label_feedback: {tool: "To be chosen", note: "Joins the true outcomes to the predictions."}
+      monitoring: {tool: "To be chosen", note: "Watches data, predictions, performance, and system health."}
+      failure_handling: {tool: "To be chosen", note: "Decides what is served when something breaks."}
+      orchestration: {tool: "To be chosen", note: "Runs the pipelines in order."}
+      testing: {tool: "To be chosen", note: "Guards each component with tests."}

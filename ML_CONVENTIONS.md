@@ -25,6 +25,7 @@ These rules apply to every skill that takes an ML project from an empty folder t
 | 9. baseline | ml-baseline-model | `notebooks/07_baseline.ipynb`, the `baseline` section, and the results and out of fold predictions as parquet |
 | 10. training | ml-model-training | `notebooks/08_training.ipynb`, the `training` section, the run log and out of fold predictions as parquet, and the champion in `models/` |
 | 11. evaluation | ml-offline-evaluation | `notebooks/09_evaluation.ipynb`, the `evaluation` section, and `docs/model_card.md` |
+| 12. system | ml-system-design | `docs/system_design.md` (no notebook), the `system` section, and `answers/11_system.yaml` |
 
 The order follows what each question needs: the mode and the two business anchors (the goal and the decision, or for an exploratory project the learning question and what each answer leads to) need no data and are what the data cannot tell, so they come first and keep the framing tied to a real decision; the rest of the business framing is then drafted from what discovery found, so its questions carry suggestions; the exact target, unit, and prediction time need the data to be understood first; and target analysis needs a confirmed target. The steps are defined once, in `WORKFLOW` and `STEPS` in `_ml_shared/ml_common.py`. `WORKFLOW` lists the stages (one section and one notebook each); `STEPS` lists the steps, where the business stage appears twice, as `business_anchors` and `business`. A new step is added there first. `/ml-status` shows progress, out of date results, and the next step. Underneath, `ml_common.py status` and `ml_common.py next` give the same progress from the command line. ml-data-discovery can be skipped when the data is already well known: ml-problem-framing then works from the column names, and the status shows the step as skipped.
 
@@ -51,9 +52,9 @@ The order follows what each question needs: the mode and the two business anchor
 
 1. The project root is the nearest folder with `ml_spec.yaml`, then `.venv`, then `.git` (`ml_common.find_project_root`). Every skill starts by finding it and works from there.
 2. Folders come from `paths` in the spec (`ml_common.project_paths`), never from hard coded strings. The defaults are `data/raw`, `data/processed`, `notebooks`, `src`, `models`, and `docs`. An older project can point `data_raw` at `data`.
-3. Every data file a notebook writes is parquet: split sets, feature tables, run logs, predictions, and evaluation results. Documents are the only exception (the business summary, the data dictionary, and the model card), and fitted models are saved in `models/` as joblib files.
+3. Every data file a notebook writes is parquet: split sets, feature tables, run logs, predictions, and evaluation results. Documents are the only exception (the business summary, the data dictionary, the model card, and the system design), and fitted models are saved in `models/` as joblib files.
 4. Run logs (such as `training_runs.parquet`) are only appended to. A stage that can be run again to add work (such as adding a model) reads earlier results back from its log instead of recomputing them.
-5. `data_raw` is read only. Skills write data only to `data_processed`, models only to `models`, notebooks only to `notebooks`, and the few documents (the business summary, the data dictionary, the model card) only to `docs`.
+5. `data_raw` is read only. Skills write data only to `data_processed`, models only to `models`, notebooks only to `notebooks`, and the few documents (the business summary, the data dictionary, the model card, the system design) only to `docs`.
 
 ## Python and permissions
 
@@ -66,7 +67,7 @@ The order follows what each question needs: the mode and the two business anchor
 
 The notebook is the record of each step. A person should be able to open it, read why each decision was made, check it against the data, change a decision, and run it again.
 
-1. Every step writes one numbered notebook: `ml_common.notebook_name(stage, suffix)` gives `01_business_framing.ipynb`, `02_data_discovery.ipynb`, `03_problem_framing.ipynb`, `04_eda_<dataset>.ipynb`, `05_split.ipynb`, and so on to `09_evaluation.ipynb`. `00_scratch.ipynb` is for free exploration.
+1. Every step writes one numbered notebook, except ml-system-design (see rule 12): `ml_common.notebook_name(stage, suffix)` gives `01_business_framing.ipynb`, `02_data_discovery.ipynb`, `03_problem_framing.ipynb`, `04_eda_<dataset>.ipynb`, `05_split.ipynb`, and so on to `09_evaluation.ipynb`. `00_scratch.ipynb` is for free exploration.
 2. A notebook starts with a markdown title and a short note on how to use it, then the setup cell from `nb_common.setup_cells`, which finds the project root, checks the kernel, and loads the spec as `spec`.
 3. Markdown cells hold the reasoning, the risks found, the assumptions, and the open questions, in plain sentences.
 4. Code cells that hold answers are marked *Decision* (a `# Decision` first line and the `decision` cell tag). They hold readable Python values, one setting per line, so a person can change them. Every other code cell computes from the data or the spec, so a person can check each claim, such as the grain, the date coverage, or the class balance.
@@ -76,7 +77,8 @@ The notebook is the record of each step. A person should be able to open it, rea
 8. `/ml-status` compares each notebook's decision cells with those recorded at its last run, and says when a notebook was edited and not run again.
 9. Notebook metadata names the project kernel (`ml_common.kernel_name(project.name)`), the same name ml-project-setup registered.
 10. Code that later stages and production must share lives in the project's `src/`, not in the notebooks. `src/features.py` is written by ml-feature-engineering from its template and protected like a notebook: the skill refuses to replace it once edited. `src/custom_features.py` belongs to the user. Learned steps are only fitted inside the CV folds, by the stage that trains a model.
-11. There are no separate markdown reports. The only documents in `docs` are the business framing summary, which the business notebook writes for people who do not read notebooks, the data dictionary, and later the model card.
+11. There are no separate markdown reports. The only documents in `docs` are the business framing summary, which the business notebook writes for people who do not read notebooks, the data dictionary, and later the model card and the system design.
+12. **ml-system-design writes no notebook.** A design has no data to check, so its record is `docs/system_design.md`, generated by `scripts/design.py` from the `system` section and the reasoning in `answers/11_system.yaml`. A hand edit of the document is protected like an edited notebook (exit code 2). To change a decision, edit the answers file and build again. The autopilot never runs it, and `ml-iterate` does not rerun it; `/ml-status` marks it out of date when the champion or the evaluation changes.
 
 ## Experiment tracking
 

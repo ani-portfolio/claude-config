@@ -56,6 +56,7 @@ WORKFLOW = [
     ("baseline", "ml-baseline-model", 7, "dummy, heuristic, and simple model baselines"),
     ("training", "ml-model-training", 8, "main model with cross validation"),
     ("evaluation", "ml-offline-evaluation", 9, "test results, segments, calibration, model card"),
+    ("system", "ml-system-design", 11, "design of the end to end system: pipelines, registry gate, serving, monitoring"),
 ]
 # The base name of each stage's notebook, after its number: 01_business_framing.ipynb, 04_eda_<dataset>.ipynb.
 NOTEBOOK_BASE = {
@@ -69,6 +70,7 @@ NOTEBOOK_BASE = {
     "baseline": "baseline",
     "training": "training",
     "evaluation": "evaluation",
+    "system": "system_design",  # no notebook: the stage writes docs/system_design.md
 }
 STAGES = [w[0] for w in WORKFLOW]
 STAGE_NUMBER = {w[0]: w[2] for w in WORKFLOW if w[2] is not None}
@@ -316,6 +318,7 @@ def template(name=None, description=None):
         "baseline": {},
         "training": {},
         "evaluation": {},
+        "system": {},  # written by ml-system-design (scripts/design.py), never by a notebook
         "iterations": {"current": None, "entries": []},  # written by the ml-iterate helper skill
         "autopilot": {},  # written by the ml-autopilot helper skill when an agent drives the workflow
         "assumptions": [],
@@ -1089,6 +1092,34 @@ MODEL_WORDS = {
 }
 
 
+def primary_metric(spec):
+    """The metric the models are judged on: the framing's primary metric, else the key the baseline and training
+    used (older projects set it there only). None when no stage names one."""
+    return (((spec.get("framing") or {}).get("success") or {}).get("primary_metric")
+            or (((spec.get("baseline") or {}).get("metrics") or {}).get("primary") or {}).get("key")
+            or (spec.get("training") or {}).get("primary_label"))
+
+
+def evaluation_decision(spec):
+    """The user's latest go, iterate, or no go decision on the evaluation, from the decisions list (the evaluation
+    section's own decision field is always null). Returns {"outcome": go | iterate | no_go | None, "decision",
+    "reason", "date"}, or None when no decision has been recorded."""
+    found = [d for d in spec.get("decisions") or [] if isinstance(d, dict) and d.get("stage") == "evaluation"
+             and not d.get("superseded_by")]
+    if not found:
+        return None
+    d = found[-1]
+
+    def read(text):
+        text = str(text or "").lower()
+        return ("no_go" if re.search(r"\bno[ -]?go\b|\bdo not (ship|deploy)\b|\bdon't (ship|deploy)\b", text) else
+                "iterate" if re.search(r"^\W*iterat|\biterate\b(?! later)", text) else
+                "go" if re.search(r"\bgo\b|\bship\b|\bpromote\b|\bdeploy\b", text) else None)
+
+    outcome = read(d.get("decision")) or read(d.get("reason"))
+    return {"outcome": outcome, "decision": d.get("decision"), "reason": d.get("reason"), "date": d.get("date")}
+
+
 def consistency_checks(spec):
     """Settings that disagree between stages, found by fixed rules. Returns a list of
     {"check", "detail", "where": [spec fields]}. Notes in free text are read by the ml-reconcile-notes skill."""
@@ -1197,6 +1228,31 @@ def consistency_checks(spec):
         if sec and ((spec.get(sec) or {}).get("status")) == "confirmed":
             add("checkpoint", f"The {sec} section is confirmed, but the autopilot checkpoint for it is still open, so "
                 "nobody has reviewed the drafts yet.", f"autopilot.checkpoints.{c.get('kind')}")
+
+    # The system design against the stages it was drafted from
+    sysd = spec.get("system") or {}
+    if sysd:
+        comps = sysd.get("components") or {}
+        champ = ((spec.get("training") or {}).get("champion") or {}).get("name")
+        if sysd.get("champion") and champ and sysd["champion"] != champ:
+            add("system champion", f"The system design was drafted for the champion {sysd['champion']}, but the "
+                f"champion is now {champ}. Rerun ml-system-design for the parts that depend on it.",
+                "system.champion", "training.champion.name")
+        gate = ((comps.get("registry") or {}).get("settings") or {}).get("gate") or {}
+        primary = primary_metric(spec)
+        if gate.get("metric") and primary:
+            gk = parse_metric(gate["metric"])[0].get("key")
+            fk = parse_metric(primary)[0].get("key")
+            if gk and fk and gk != fk:
+                add("gate metric", f"The champion/challenger gate compares {gate['metric']}, but the primary metric is "
+                    f"{primary}.", "system.components.registry.settings.gate.metric", "framing.success.primary_metric")
+        served = ((comps.get("features") or {}).get("settings") or {}).get("served_inputs")
+        if served is not None and fe.get("inputs"):
+            missing = sorted({i.get("name") for i in fe["inputs"] if isinstance(i, dict)} - set(served or []))
+            if missing:
+                add("served inputs", "The system design does not say how these model inputs are computed at "
+                    "serving time: " + ", ".join(missing[:10]) + ("." if len(missing) <= 10 else ", and more."),
+                    "system.components.features.settings.served_inputs", "features.inputs")
 
     # Open questions for stages that are finished
     order = [s[0] for s in STEPS]

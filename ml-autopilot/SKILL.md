@@ -18,8 +18,9 @@ It is a helper for the ML project skills, not a workflow step. The shared conven
 4. **Experiments never touch the project.** Each runs in its own worktree. Only `autopilot.py round close` merges anything back, and only the experiment the round settled on, which always passed the iteration bar against the champion.
 5. **Stop when the limits say so.** The rounds stop at `iterations.bar.max_iterations`, when a round adopts nothing and the backlog has nothing left to try, or when the diagnosis finds nothing worth trying.
 6. **Use the scripts.** `scripts/autopilot.py` writes the `autopilot` section. `iterate.py` (in ml-iterate) writes the `iterations` section, and `scripts/workspace.py` makes and removes worktrees. Do not edit either section by hand.
-7. **No raw data in the reply or in the checkpoint page.** Use metrics, counts, and dates.
-8. **Writing style.** Use simple language and full sentences. Use plain headings. Do not use dashes as punctuation.
+7. **The system design is out of scope.** Never run ml-system-design, even when ml-status names it as the next step: it commits accounts, keys, and money, so the person runs it after the autopilot finishes. `autopilot.py next` skips it.
+8. **No raw data in the reply or in the checkpoint page.** Use metrics, counts, and dates.
+9. **Writing style.** Use simple language and full sentences. Use plain headings. Do not use dashes as punctuation.
 
 ## Step 1: Find the project and the next action
 
@@ -188,7 +189,7 @@ Reply with these parts, in this order:
 2. **Summary:** the goal in one sentence, the champion with its CV score and its test score (and how many looks), and the rounds as a table (experiment, phase, changes, bar result, status), and the round's log. End with the reason iterating stopped.
 3. **MLflow:** the project experiment link (`tracking.ui` in the spec), and that each experiment is a parent run under its version's run.
 4. **Problems:** stages that failed, agents that stopped, and drafts that were never reviewed, one sentence each.
-5. **Next step:** `/ml-reconcile-notes` after kept rounds, then `/ml-status`. Merging the version branch into main is the person's choice.
+5. **Next step:** `/ml-reconcile-notes` after kept rounds, then `/ml-status`. After a go decision on the final evaluation, the person designs the system with `/ml-system-design`. Merging the version branch into main is the person's choice.
 
 ## Files
 
