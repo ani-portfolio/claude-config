@@ -442,7 +442,36 @@ def load(path):
         return {}
     if not isinstance(data, dict):
         sys.exit(f"{path} does not hold a mapping at the top level, so it is not a valid spec.")
+    _fix_yaml_on(data)
     return data
+
+
+def _fix_yaml_on(obj):
+    """YAML 1.1 (PyYAML) reads an unquoted `on:` key as the boolean True, so `{kind: ..., on: test}` loses the
+    key the V1 criteria are judged by; once saved, the key becomes the text "True". Rename either back to "on" in
+    every v1_criteria list, wherever it is (the spec, an answers file, or an answers file kept under answers:)."""
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            if k == "v1_criteria" and isinstance(v, list):
+                for c in v:
+                    key = next((k for k in _ON_KEYS if isinstance(c, dict) and k in c), None)
+                    if key is not None and "on" not in c:
+                        c["on"] = c.pop(key)
+            else:
+                _fix_yaml_on(v)
+    elif isinstance(obj, list):
+        for v in obj:
+            _fix_yaml_on(v)
+
+
+_ON_KEYS = (True, "True", "true")
+
+
+def criterion_on(c):
+    """Whether a V1 criterion is judged on cv or test (cv when not set), also when YAML read `on` as True."""
+    if not isinstance(c, dict):
+        return "cv"
+    return c.get("on") or next((c[k] for k in _ON_KEYS if k in c), "cv")
 
 
 if yaml is not None:
@@ -928,7 +957,7 @@ def v1_problems(criteria):
         if kind not in V1_KINDS:
             out.append(f"{cid}: kind {kind!r} is not one of {', '.join(V1_KINDS)}.")
             continue
-        if c.get("on", "cv") not in V1_ON:
+        if criterion_on(c) not in V1_ON:
             out.append(f"{cid}: on must be cv or test.")
         missing = [k for k in V1_KINDS[kind] if c.get(k) in (None, "")]
         if missing:
@@ -959,7 +988,7 @@ def v1_evaluate(spec, on, scores, champion, reference=None, checks=None, primary
     lower = primary in LOWER_IS_BETTER
     reference = reference or ((bl.get("reference") or {}).get("name"))
     crit = [c for c in (((spec or {}).get("framing") or {}).get("success") or {}).get("v1_criteria") or []
-            if isinstance(c, dict) and c.get("on", "cv") == on]
+            if isinstance(c, dict) and criterion_on(c) == on]
     mine = (scores or {}).get(champion) or {}
     out = []
     for c in crit:

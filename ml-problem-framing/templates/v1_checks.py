@@ -3,7 +3,7 @@ check is used, and never changes it, so it is yours to edit.
 
 A criterion in framing.success.v1_criteria such as
 
-    - {id: media_nonneg, kind: check, function: media_coefs_nonneg, on: cv}
+    - {id: media_nonneg, kind: check, function: media_coefs_nonneg, "on": cv}
 
 calls the function of that name here when model training (on: cv) or offline evaluation (on: test) judges the
 V1 bar. Optional params in the criterion are passed as keyword arguments.

@@ -27,10 +27,10 @@ framing:
     v1_bar: Recall at 500 at least 20% higher than the current 30 day rule
     guardrails: [Offer volume stays within the weekly budget]
     # The V1 bar as checks a script can apply (see the Success Criteria hint in the notebook). on: cv is judged in
-    # model training, on: test in offline evaluation.
+    # model training, on: test in offline evaluation. Quote the key as "on": unquoted, YAML reads it as true.
     v1_criteria:
-      - {id: beats_rule_cv, kind: pct_over_reference, pct: 20, on: cv}
-      - {id: beats_rule_test, kind: pct_over_reference, pct: 20, on: test}
+      - {id: beats_rule_cv, kind: pct_over_reference, pct: 20, "on": cv}
+      - {id: beats_rule_test, kind: pct_over_reference, pct: 20, "on": test}
       - {id: offers_in_budget, kind: manual, text: Offer volume stays within the weekly budget}
 data:
   date_col: scoring_date

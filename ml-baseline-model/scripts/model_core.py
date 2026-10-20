@@ -283,8 +283,10 @@ def run_v1_checks(ctx):
     when the function is missing or fails, so the bar is reported incomplete, never failed, for that reason."""
     import importlib
     import os
+
+    import ml_common
     crit = [c for c in ((ctx.spec.get("framing") or {}).get("success") or {}).get("v1_criteria") or []
-            if isinstance(c, dict) and c.get("kind") == "check" and c.get("on", "cv") == ctx.on]
+            if isinstance(c, dict) and c.get("kind") == "check" and ml_common.criterion_on(c) == ctx.on]
     if not crit:
         return {}
     if ctx.root not in sys.path:

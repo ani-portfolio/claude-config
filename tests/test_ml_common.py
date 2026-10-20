@@ -119,6 +119,29 @@ def test_kept_against_failed_bar_is_flagged():
     assert not any(c["check"] == "iteration bar" for c in m.consistency_checks(s))
 
 
+def test_unquoted_on_key_is_read_back():
+    import tempfile
+    path = os.path.join(tempfile.mkdtemp(), "answers.yaml")
+    with open(path, "w") as f:
+        f.write("framing:\n  success:\n    v1_criteria:\n"
+                "      - {id: a, kind: pct_over_reference, pct: 10, on: cv}\n"
+                "      - {id: b, kind: pct_over_reference, pct: 0, on: test}\n")
+    crit = m.load(path)["framing"]["success"]["v1_criteria"]
+    assert [m.criterion_on(c) for c in crit] == ["cv", "test"], crit
+    assert all(True not in c for c in crit)
+    assert m.criterion_on({True: "test"}) == "test" and m.criterion_on({}) == "cv"
+    assert m.criterion_on({"True": "test"}) == "test"
+    with open(path, "w") as f:
+        f.write("framing:\n  success:\n    v1_criteria:\n      - {id: b, kind: manual, text: t, 'True': test}\n")
+    assert m.load(path)["framing"]["success"]["v1_criteria"][0]["on"] == "test"
+    s = _spec()
+    s["framing"]["success"]["v1_criteria"] = [{"id": "a", "kind": "pct_over_reference", "pct": 10, True: "cv"},
+                                              {"id": "b", "kind": "pct_over_reference", "pct": 0, True: "test"}]
+    s["baseline"] = {"reference": {"name": "naive"}, "primary_label": "mae"}
+    res = m.v1_evaluate(s, "cv", {"lgbm": {"mae": 2.0}, "naive": {"mae": 2.5}}, "lgbm")
+    assert [c["id"] for c in res["criteria"]] == ["a"], res
+
+
 def main():
     tests = [(k, v) for k, v in globals().items() if k.startswith("test_") and callable(v)]
     failed = 0
