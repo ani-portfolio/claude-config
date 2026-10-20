@@ -133,7 +133,7 @@ The skills are built so an agent (or ml-iterate) can drive them, not only a pers
 4. **The saved champion loads anywhere.** `model_core.save_model` stores skill estimators (such as `NonNegRidge`) by value, so `joblib.load` needs only scikit-learn and the project's `src`.
 5. **Evaluation checks itself before the test set is opened.** Every model's CV score must reproduce through the evaluation's scoring path (`eval_core.self_check`); otherwise the notebook stops.
 6. **Experiments never take over the project in MLflow.** While `ML_ITERATE_EXPERIMENT` is set, or the project root has `.ml_workspace.json`, `tracking.log_stage` logs stage runs as candidates under the experiment's parent run, never as `current`, and the champion it registers gets the alias `candidate-<experiment>`, never `champion` or the version's alias. Only `tracking.promote` moves `current` and the aliases; `tracking.reject` only tags. The spec still decides; MLflow records.
-7. **Autopilot mode.** A stage skill called with the argument `autopilot`, or run in an experiment workspace (`ml_common.autopilot_mode`), asks nothing: it takes its recommended answers, records them as assumptions with `source: autopilot draft`, and never confirms a framing.
+7. **Autopilot mode.** A stage skill called with the argument `autopilot`, or run in an experiment workspace (`ml_common.autopilot_mode`), asks nothing: it takes its recommended answers, records them as assumptions with `source: autopilot draft`, and never confirms a framing. The spec keeps assumptions as plain text, so `nb_common.write_stage` stores such a mapping as text that starts with `Autopilot draft: ` (`ml_common.assumption_text`), which is how the checkpoint page finds them.
 
 ### The autopilot
 

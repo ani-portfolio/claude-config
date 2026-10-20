@@ -664,6 +664,25 @@ def autopilot_settings(spec):
     return {**AUTOPILOT_DEFAULTS, **_autopilot_settings_now(((spec or {}).get("autopilot") or {}).get("settings"))}
 
 
+# How an assumption a stage skill took without a person is marked in the spec's assumptions, which are plain text.
+AUTOPILOT_DRAFT = "Autopilot draft: "
+
+
+def assumption_text(a):
+    """An assumption as the plain text the spec keeps. A mapping such as {assumption, source: autopilot draft} (how
+    the stage skills record answers taken without a person) becomes text marked with AUTOPILOT_DRAFT."""
+    if isinstance(a, dict):
+        text = str(a.get("assumption") or a.get("text") or "").strip()
+        if "autopilot" in str(a.get("source") or "").lower() and not text.startswith(AUTOPILOT_DRAFT):
+            text = AUTOPILOT_DRAFT + text
+        return text
+    return str(a or "").strip()
+
+
+def is_autopilot_draft(a):
+    return assumption_text(a).startswith(AUTOPILOT_DRAFT)
+
+
 def autopilot_mode(args=None, root=None):
     """True when a stage skill runs without a person: called by ml-autopilot (the word autopilot in its
     arguments, or ML_AUTOPILOT=1), or inside an experiment workspace."""

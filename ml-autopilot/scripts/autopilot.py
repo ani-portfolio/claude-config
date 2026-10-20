@@ -246,11 +246,10 @@ def checkpoint_text(spec, kind):
                   "Every value below is a draft the agent proposed from the data. Mark the rows you dispute; the rest "
                   "are accepted as they are.", "", "| Field | Draft |", "|---|---|"]
         lines += [f"| `{k}` | {_fmt(v).replace('|', '/')} |" for k, v in _section_rows(spec, kind)]
-        drafts = [a for a in spec.get("assumptions") or [] if isinstance(a, dict)
-                  and "autopilot" in str(a.get("source") or "")]
+        drafts = [ml_common.assumption_text(a)[len(ml_common.AUTOPILOT_DRAFT):]
+                  for a in spec.get("assumptions") or [] if ml_common.is_autopilot_draft(a)]
         if drafts:
-            lines += ["", "## Assumptions the agent made", ""] + [f"* {_fmt(a.get('assumption') or a.get('text') or a)}"
-                                                                  for a in drafts]
+            lines += ["", "## Assumptions the agent made", ""] + [f"* {_fmt(a)}" for a in drafts]
         flags = _red_flags(spec, kind)
         lines += ["", "## Red flags", ""] + ([f"* {f}" for f in flags] or ["* None found."])
         lines += ["", "## What resuming does", "",

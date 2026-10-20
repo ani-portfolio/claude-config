@@ -390,8 +390,12 @@ def write_stage(spec_path, section, values, skill, assumptions=(), open_question
     """
     spec, _ = ml_common.load_or_create(spec_path)
     spec[section] = values if replace else ml_common.deep_merge(spec.get(section) or {}, values)
-    have = set(spec.get("assumptions") or [])
-    spec["assumptions"] = list(spec.get("assumptions") or []) + [a for a in assumptions if a not in have]
+    # Assumptions are plain text; a mapping with a source (an autopilot draft) is turned into text
+    spec["assumptions"] = [ml_common.assumption_text(a) for a in spec.get("assumptions") or []]
+    for a in assumptions:
+        text = ml_common.assumption_text(a)
+        if text and text not in spec["assumptions"]:
+            spec["assumptions"].append(text)
     today = _dt.date.today().isoformat()
     have_d = {d.get("decision") for d in spec.get("decisions") or [] if isinstance(d, dict)}
     spec["decisions"] = list(spec.get("decisions") or []) + [

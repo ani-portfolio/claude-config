@@ -276,6 +276,31 @@ def test_failed_combination_falls_back_to_greedy():
     assert _run(s, entry, st) == [] and st["final"] == "g1" and st["greedy"]["set"] == ["a", "b"], st
 
 
+def test_autopilot_drafts_are_text_and_shown_at_the_checkpoint():
+    assert m.assumption_text({"assumption": "x", "source": "autopilot draft"}) == "Autopilot draft: x"
+    assert m.assumption_text({"assumption": "Autopilot draft: x", "source": "autopilot draft"}) == "Autopilot draft: x"
+    assert m.assumption_text({"assumption": "y", "source": "user"}) == "y" and m.assumption_text(" z ") == "z"
+    s = _spec(outcome="o")
+    s["assumptions"] = ["Autopilot draft: capacity is 10%", "a person's assumption",
+                        {"assumption": "an old mapping", "source": "autopilot draft"}]
+    page = a.checkpoint_text(s, "business")
+    assert "* capacity is 10%" in page and "* an old mapping" in page and "a person's" not in page, page
+
+
+def test_write_stage_keeps_assumptions_as_text():
+    import tempfile
+    sys.path.insert(0, os.path.join(os.path.dirname(HERE), "_ml_shared"))
+    import nb_common
+    with tempfile.TemporaryDirectory() as d:
+        p = os.path.join(d, m.SPEC_NAME)
+        s = _spec()
+        s["assumptions"] = ["kept"]
+        m.save(p, s)
+        nb_common.write_stage(p, "eda", {"mode": "targeted"}, "ml-eda-report",
+                              assumptions=[{"assumption": "x", "source": "autopilot draft"}, "kept", "new"])
+        assert m.load(p)["assumptions"] == ["kept", "Autopilot draft: x", "new"], m.load(p)["assumptions"]
+
+
 def test_checkpoint_kinds_validate():
     s = _spec()
     s["autopilot"]["checkpoints"] = [{"kind": "nope", "status": "open"}]
