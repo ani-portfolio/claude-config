@@ -37,9 +37,10 @@ For each component, send one message: the draft (tool from the stack, settings f
 **Red flags:** retraining on a schedule with no gate after it.
 
 ### 5. Registry and gate (`registry`) (champion dependent)
-**Draft from:** `framing.primary_metric`, `champion.std`, `evaluation.comparisons`. Settings: `gate` with `metric` (must be the framing's primary metric), `margin` (in the metric's units, at least the champion's CV std), `window_days` (the live window both models are compared on), `promotion` (manual or auto); `lineage`.
-**Follow ups (one at a time):** the margin, with the CV std shown; manual or automatic promotion.
-**Red flags:** a margin below the CV std (blocked); automatic promotion with no monitoring (warned).
+**Draft from:** `framing.primary_metric`, `champion.std`, `evaluation.comparisons`. Settings: `gate` with `metric` (must be the framing's primary metric), exactly one of `margin` (in the metric's units, at least the champion's CV std) or `test` (a paired significance test on the daily metric difference: `name` `diebold_mariano` or `block_bootstrap`, `alpha`, `sided`), `window_days` (the live window both models are compared on, optional with a test), `promotion` (manual or auto); `lineage`.
+**Follow ups (one at a time):** a fixed margin or a significance test; then the margin, with the CV std shown, or the test and its alpha; manual or automatic promotion.
+**Why a test can suit better:** the CV std includes how much harder some seasons are than others, which cancels out when both models are scored on the same days, so a margin of at least the CV std can be far larger than the noise of a paired comparison.
+**Red flags:** a margin below the CV std (blocked); both a margin and a test (blocked); automatic promotion with no monitoring (warned).
 
 ### 6. Inference (`inference`)
 **Draft from:** `framing.prediction_time.cadence`, `business.output_use`, the constraints. Settings: `mode` (batch or online), `schedule`, and `logging` (what each prediction log row holds: model version, features, time).

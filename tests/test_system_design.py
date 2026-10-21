@@ -107,6 +107,33 @@ def test_gate_margin_below_cv_spread_is_blocked():
     assert "gate margin" in _ids(d.check(_spec(), _answers(**{"components.registry.settings.gate.margin": "small"}))[0])
 
 
+GATE = "components.registry.settings.gate"
+DM = {"name": "diebold_mariano", "alpha": 0.05, "sided": "one"}
+
+
+def _test_gate(**test):
+    return _answers(**{f"{GATE}.margin": None, f"{GATE}.window_days": None, f"{GATE}.test": {**DM, **test}})
+
+
+def test_gate_test_replaces_the_margin():
+    blocks, warns = d.check(_spec(), _test_gate())
+    assert not blocks, blocks
+    assert _ids(warns) == {"online for a batch cadence"}, warns
+
+
+def test_gate_needs_exactly_one_of_margin_and_test():
+    assert "gate rule" in _ids(d.check(_spec(), _answers(**{f"{GATE}.test": DM}))[0])
+    assert "gate rule" in _ids(d.check(_spec(), _answers(**{f"{GATE}.margin": None}))[0])
+
+
+def test_gate_test_settings_are_checked():
+    assert "gate test" in _ids(d.check(_spec(), _test_gate(name="t_test"))[0])
+    assert "gate test" in _ids(d.check(_spec(), _test_gate(alpha=0.5))[0])
+    assert "gate test" in _ids(d.check(_spec(), _test_gate(alpha=0))[0])
+    assert "gate test" in _ids(d.check(_spec(), _test_gate(sided="both"))[0])
+    assert "gate test" not in _ids(d.check(_spec(), _test_gate(name="block_bootstrap", sided="two"))[0])
+
+
 def test_every_input_must_be_served():
     blocks = d.check(_spec(), _answers(**{"components.features.settings.served_inputs": INPUTS[:2]}))[0]
     assert any(b["id"] == "served inputs" and "day_of_year" in b["detail"] for b in blocks), blocks

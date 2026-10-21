@@ -744,8 +744,8 @@ def candidate(spec=None, root=None):
     Two sources. A workspace run (an agent working on a copy of the project) sets ML_ITERATE_EXPERIMENT and the
     parent run in the environment, or ml-autopilot's workspace.py writes them to .ml_workspace.json at the
     workspace root (each shell command of an agent starts a fresh shell, so the file is the reliable source): its
-    runs never become current. An iteration opened in the project itself by
-    ml-iterate is read from the spec (the open iteration's version and parent run), because each Claude Code
+    runs never become current. An iteration opened by ml-iterate, in the project itself or in its own worktree
+    (--worktree), is read from the spec (the open iteration's version and parent run), because each Claude Code
     command starts a fresh shell: its runs become current, so MLflow keeps matching the spec, but stay candidates
     until the iteration closes, and the alias 'champion' only moves when the version is promoted."""
     exp = os.environ.get("ML_ITERATE_EXPERIMENT")
@@ -753,7 +753,7 @@ def candidate(spec=None, root=None):
         return {"experiment": exp, "iteration": os.environ.get("ML_ITERATE_ITERATION"),
                 "parent": os.environ.get("ML_ITERATE_PARENT_RUN"),
                 "agent_session": os.environ.get("ML_AGENT_SESSION"), "in_place": False}
-    ws = ml_common.workspace_info(root) if root else None
+    ws = ml_common.experiment_workspace(root) if root else None
     if ws and ws.get("experiment"):
         return {"experiment": ws["experiment"], "iteration": ws.get("iteration"), "parent": ws.get("parent_run"),
                 "agent_session": os.environ.get("ML_AGENT_SESSION") or ws.get("agent_session"), "in_place": False}

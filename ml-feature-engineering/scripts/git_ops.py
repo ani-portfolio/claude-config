@@ -162,10 +162,11 @@ def commit_paths(root, paths, message, spec=None, trailers=None):
     return head(root)
 
 
-def tag(root, name, message):
+def tag(root, name, message, ref=None):
+    """An annotated tag on ref (the current commit by default)."""
     if not is_repo(root) or tag_exists(root, name):
         return False
-    return git(root, "tag", "-a", name, "-m", message).returncode == 0
+    return git(root, "tag", "-a", name, "-m", message, *([ref] if ref else [])).returncode == 0
 
 
 def stage_paths(spec, root, stage, spec_path):

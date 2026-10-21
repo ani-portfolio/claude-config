@@ -666,8 +666,10 @@ WORKSPACE_FILE = ".ml_workspace.json"
 
 
 def workspace_info(root):
-    """The experiment a workspace (a git worktree made by ml-autopilot's workspace.py) belongs to, from the
-    WORKSPACE_FILE at its root: {experiment, iteration, parent_run, main_root, branch, ...}, or None outside one."""
+    """The work a workspace (a git worktree made by workspace.py) holds, from the WORKSPACE_FILE at its root:
+    {kind, experiment or version, iteration, parent_run, main_root, branch, ...}, or None outside one. kind is
+    experiment (an ml-autopilot experiment, run by an agent) or iteration (an ml-iterate iteration with
+    --worktree, run with a person); files from before kinds existed are experiments."""
     if not root:
         return None
     p = os.path.join(root, WORKSPACE_FILE)
@@ -678,7 +680,16 @@ def workspace_info(root):
             info = json.load(f)
     except (OSError, ValueError):
         return None
-    return info if isinstance(info, dict) else None
+    if not isinstance(info, dict):
+        return None
+    info.setdefault("kind", "experiment")
+    return info
+
+
+def experiment_workspace(root):
+    """workspace_info when the workspace holds an ml-autopilot experiment, else None."""
+    ws = workspace_info(root)
+    return ws if ws and ws["kind"] == "experiment" else None
 
 
 def _autopilot_settings_now(settings):
@@ -717,10 +728,10 @@ def is_autopilot_draft(a):
 
 def autopilot_mode(args=None, root=None):
     """True when a stage skill runs without a person: called by ml-autopilot (the word autopilot in its
-    arguments, or ML_AUTOPILOT=1), or inside an experiment workspace."""
+    arguments, or ML_AUTOPILOT=1), or inside an experiment's workspace. An iteration's workspace has a person."""
     words = str(args or "").lower().replace(",", " ").split()
     return ("autopilot" in words or "--autopilot" in words or os.environ.get("ML_AUTOPILOT") == "1"
-            or workspace_info(root) is not None)
+            or experiment_workspace(root) is not None)
 
 
 def open_checkpoints(spec):
@@ -1363,7 +1374,8 @@ def _print_status(spec, path):
                                else "running; /ml-autopilot shows the next action."))
     ws = workspace_info(root)
     if ws:
-        print(f"Workspace: experiment {ws.get('experiment')} on branch {ws.get('branch')}, a copy of {ws.get('main_root')}.")
+        what = f"experiment {ws.get('experiment')}" if ws["kind"] == "experiment" else f"iteration {ws.get('version')}"
+        print(f"Workspace: {what} on branch {ws.get('branch')}, a copy of {ws.get('main_root')}.")
     step, skill, how = next_step(spec)
     print("Next: " + (f"run the {skill} skill" + (f", {how}" if how else "") + f" ({step})." if step
                       else "every step is done."))

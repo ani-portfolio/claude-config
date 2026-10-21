@@ -37,6 +37,7 @@ components:
     settings:
       decides_champion: Hopsworks registry for deployment; MLflow keeps experiments, linked by MLflow run id
       gate: {metric: MAE, margin: 0.15, window_days: 28, promotion: manual}   # metric = the framing's primary metric
+      # or, instead of a margin: test: {name: diebold_mariano, alpha: 0.05, sided: one}  (window_days optional)
       lineage: model version, feature view version, training dataset version, MLflow run id
     reason: The gate compares the challenger with the champion on the last 28 days of live labels.
   inference:

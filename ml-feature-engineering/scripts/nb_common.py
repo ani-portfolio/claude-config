@@ -613,8 +613,9 @@ def after_build(spec_path, stage, skill, answers_path=None):
 
 
 def _refuse_during_round(argv):
-    """While an ml-autopilot round is open, its experiments run in their own worktrees and the project must not
-    change: a stage build in the project itself (an agent that forgot to cd to its workspace, say) is refused."""
+    """While an ml-autopilot round is open, or an ml-iterate iteration runs in its own worktree, the work happens in
+    worktrees and the project must not change: a stage build in the project itself (an agent or a person that forgot
+    to cd to the workspace, say) is refused."""
     if set(argv) & INFO_FLAGS:
         return
     spec_arg = argv[argv.index("--spec") + 1] if "--spec" in argv and argv.index("--spec") + 1 < len(argv) else None
@@ -627,10 +628,16 @@ def _refuse_during_round(argv):
     entry = next((e for e in it.get("entries") or [] if isinstance(e, dict) and e.get("id") == it.get("current")
                   and e.get("status") == "open"), None)
     root = os.path.dirname(os.path.abspath(path))
-    if entry and entry.get("experiments") and not getattr(ml_common, "workspace_info", lambda r: None)(root):
+    if not entry or getattr(ml_common, "workspace_info", lambda r: None)(root):
+        return
+    if entry.get("experiments"):
         sys.exit(f"An ml-autopilot round ({entry.get('version')}) is open, so this project must not change while its "
                  f"experiments run. Run the stage inside the experiment's workspace (.worktrees/<experiment>/), or "
                  f"close the round with autopilot.py round close first.")
+    if entry.get("workspace"):
+        sys.exit(f"Iteration {entry.get('id')} ({entry.get('version')}) runs in its own worktree, so this project must "
+                 f"not change until it closes. Run the stage inside {entry['workspace']}/, or close the iteration "
+                 f"with iterate.py close from here first.")
 
 
 def cli(main_fn, stage, skill):

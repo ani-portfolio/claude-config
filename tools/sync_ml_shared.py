@@ -11,6 +11,8 @@ and the split skill and the modelling skills after it (see SPLIT_SKILLS below) a
     scripts/split_core.py       copy of _ml_shared/split_core.py, the split engine and cv_splits
 and the stages that fit models (see MODEL_SKILLS below) also keep:
     scripts/model_core.py       copy of _ml_shared/model_core.py, metrics, model definitions, cross validation
+and the skills that run work in git worktrees (see WORKSPACE_SKILLS below) also keep:
+    scripts/workspace.py        copy of _ml_shared/workspace.py, the worktrees of experiments and iterations
 
 Run from the claude-skills folder:
     python3 tools/sync_ml_shared.py          # report copies that differ or are missing (exit 1 if any)
@@ -33,6 +35,8 @@ SPLIT_SKILLS = ["ml-train-test-split", "ml-feature-engineering", "ml-baseline-mo
                 "ml-offline-evaluation", "ml-review"]
 # The stages that fit and score models share the metrics and model definitions.
 MODEL_SKILLS = ["ml-baseline-model", "ml-model-training", "ml-offline-evaluation", "ml-review"]
+# ml-autopilot runs its experiments in worktrees, and ml-iterate can run an iteration in one.
+WORKSPACE_SKILLS = ["ml-autopilot", "ml-iterate"]
 FILES = {
     # canonical file: (path inside the skill, skills that keep a copy, or None for every skill in skills.txt)
     "ml_common.py": ("scripts/ml_common.py", None),
@@ -43,6 +47,7 @@ FILES = {
     "model_core.py": ("scripts/model_core.py", MODEL_SKILLS),
     "tracking.py": ("scripts/tracking.py", None),
     "git_ops.py": ("scripts/git_ops.py", None),
+    "workspace.py": ("scripts/workspace.py", WORKSPACE_SKILLS),
 }
 
 

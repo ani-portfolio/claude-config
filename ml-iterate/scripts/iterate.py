@@ -49,6 +49,7 @@ import glob
 import hashlib
 import json
 import os
+import re
 import shutil
 import sys
 
@@ -90,6 +91,14 @@ def _tracking():
     try:
         import tracking
         return tracking
+    except ImportError:
+        return None
+
+
+def _workspace():
+    try:
+        import workspace
+        return workspace
     except ImportError:
         return None
 
@@ -212,7 +221,11 @@ def _settle_git(spec, root, spec_path, entry, outcome, ver, restored_files):
                                                                      os.path.join(root, "answers")]
     sha = _commit(root, spec, spec_path, f"{ver} closed: {outcome.replace('_', ' ')}", extra)
     tag = ver.lower() + ("-rolled-back" if outcome == "rolled_back" else "")
-    if g.tag(root, tag, f"{ver} closed as {outcome}"):
+    # A rolled back iteration that ran in a worktree did its work on its own branch: the tag marks that work
+    ref = entry.get("workspace_branch") if outcome == "rolled_back" else None
+    if ref and not g.branch_exists(root, ref):
+        ref = None
+    if g.tag(root, tag, f"{ver} closed as {outcome}", ref=ref):
         notes.append(f"git: tagged {tag}" + (f" ({sha[:8]})" if sha else ""))
     if outcome == "rolled_back":
         prev_branch = f"ml/{(entry.get('previous_version') or 'V1').lower()}"
@@ -598,9 +611,14 @@ def add_experiments(spec, spec_path, experiments):
     return {"ok": True, "experiments": added}
 
 
-def open_iteration(spec, root, spec_path, plan, dry_run=False):
+def open_iteration(spec, root, spec_path, plan, dry_run=False, worktree=False):
     it = _iters(spec)
     problems = []
+    worktree = bool(worktree or plan.get("worktree"))
+    if worktree and plan.get("experiments"):
+        problems.append("A round of experiments runs each experiment in its own worktree already; drop --worktree.")
+    if ml_common.workspace_info(root):
+        problems.append("This is a workspace. Open the iteration from the main project.")
     if _open_entry(spec):
         problems.append(f"Iteration {it['current']} is still open. Close it first with `iterate.py close`.")
     if not (spec.get("evaluation") or {}).get("test_opened"):
@@ -636,7 +654,8 @@ def open_iteration(spec, root, spec_path, plan, dry_run=False):
     if experiments:
         entry["experiments"] = [_experiment_record(x) for x in experiments]
     if dry_run:
-        return {"ok": True, "dry_run": True, "entry": entry, "files": _snapshot_files(spec, root, spec_path)}
+        return {"ok": True, "dry_run": True, "entry": entry, "files": _snapshot_files(spec, root, spec_path),
+                "worktree": worktree}
     copied, skipped = snapshot(spec, root, spec_path, dest)
     notes = _start_version(spec, root, spec_path, entry)
     for x in entry.get("experiments") or []:
@@ -661,7 +680,44 @@ def open_iteration(spec, root, spec_path, plan, dry_run=False):
         notes.append(f"MLflow: {entry['version']} parent run {parent[:8]}; every stage run of the iteration is logged under it")
     if _commit(root, spec, spec_path, f"{entry['version']} opened: {entry['hypothesis']}"):
         notes.append(f"git: committed the opening of {entry['version']}")
+    if worktree:
+        notes += _open_workspace(root, spec_path, entry)
     return {"ok": True, "entry": entry, "copied": len(copied), "skipped": skipped, "notes": notes}
+
+
+def _open_workspace(root, spec_path, entry):
+    """Run the iteration in its own worktree (.worktrees/v2 on the branch iter/v2), so the project does not change
+    until the iteration closes. Returns notes; when no worktree can be made, the iteration runs in place."""
+    ws, g = _workspace(), _git()
+    if ws is None or g is None or not g.is_repo(root):
+        return ["No worktree was made (git or workspace.py is not available): the iteration runs in place."]
+    slug = entry["version"].lower()
+    branch = f"iter/{slug}"
+    rel = f"{ws.WORKTREES}/{slug}"
+
+    def _record(fields):
+        spec = ml_common.load(spec_path)
+        e = next(x for x in _iters(spec)["entries"] if x.get("id") == entry["id"])
+        for k, v in fields.items():
+            if v is None:
+                e.pop(k, None)
+            else:
+                e[k] = v
+        ml_common.save(spec_path, spec)
+        _commit(root, spec, spec_path, f"{entry['version']}: " + ("runs in " + rel if fields["workspace"] else
+                                                                   "runs in place"))
+
+    # The worktree starts from the last commit, so the spec must say where the iteration runs first
+    _record({"workspace": rel, "workspace_branch": branch})
+    ok, path, notes = ws.make(root, spec_path, slug, branch,
+                              {"kind": "iteration", "version": entry["version"], "iteration": entry["id"],
+                               "parent_run": entry.get("mlflow_parent_run")},
+                              extra_copy=[entry.get("snapshot") or ""])
+    if not ok:
+        _record({"workspace": None, "workspace_branch": None})
+        return notes + ["No worktree was made: the iteration runs in place."]
+    entry.update(workspace=rel, workspace_branch=branch)
+    return notes
 
 
 def remaining(spec):
@@ -697,7 +753,10 @@ def carry_forward(spec, root):
     champ = (old.get("training") or {}).get("champion") or {}
     if not champ.get("name"):
         return {"ok": False, "problems": ["The snapshot has no champion to carry forward."]}
-    model = _model_entry(champ, f"{champ['name']}_iter{e['id'] - 1}",
+    # A champion that was itself carried forward keeps its name: it is the same model and the same tuning study,
+    # so the run log, the out of fold predictions, and the iteration bar find it under one name
+    name = champ["name"] if re.search(r"_iter\d+$", champ["name"]) else f"{champ['name']}_iter{e['id'] - 1}"
+    model = _model_entry(champ, name,
                          f"The champion of iteration {e['id'] - 1}, carried forward with its tuned settings fixed, so "
                          "it is scored on the same folds and features as the new models.")
     # Which columns does it need, and do they still exist?
@@ -801,6 +860,17 @@ def close_iteration(spec, root, spec_path, outcome, reason, do_restore=False, dr
     e = _open_entry(spec)
     if not e:
         return {"ok": False, "problems": ["No iteration is open."]}
+    ws_rel = e.get("workspace")
+    if ws_rel and ml_common.workspace_info(root):
+        return {"ok": False, "problems": ["This iteration runs in this worktree. Close it from the main project "
+                                          f"({(ml_common.workspace_info(root) or {}).get('main_root')})."]}
+    # An iteration in a worktree reached its end state there: read it from the worktree's spec and files
+    state_spec, state_root, state_e = spec, root, e
+    ws_path = os.path.join(root, ws_rel) if ws_rel else None
+    if ws_path and os.path.exists(os.path.join(ws_path, ml_common.SPEC_NAME)):
+        state_root = ws_path
+        state_spec = ml_common.load(os.path.join(ws_path, ml_common.SPEC_NAME))
+        state_e = _open_entry(state_spec) or e
     if adopted is not None or none_passed:
         if not e.get("experiments"):
             return {"ok": False, "problems": ["--adopted and --none-passed close a round, and this iteration has no "
@@ -815,18 +885,18 @@ def close_iteration(spec, root, spec_path, outcome, reason, do_restore=False, dr
         return {"ok": False, "problems": [f"outcome must be one of {', '.join(OUTCOMES)}"]}
     if not str(reason or "").strip():
         return {"ok": False, "problems": ["Give the reason for the outcome."]}
-    if outcome == "rolled_back" and not do_restore:
+    if outcome == "rolled_back" and not do_restore and not ws_rel:
         return {"ok": False, "problems": ["Rolling back restores the snapshot over the current files. Ask the user, then "
                                           "rerun with --restore."]}
-    _, left = remaining(spec)
-    end = _champion_state(spec)
-    end["folds"] = _hash_obj(((spec.get("split") or {}).get("cv") or {}).get("folds"))
-    carried = (e.get("carried_forward") or {}).get("name")
-    lb = {r.get("model"): r for r in (spec.get("training") or {}).get("leaderboard") or []}
+    _, left = remaining(state_spec)
+    end = _champion_state(state_spec)
+    end["folds"] = _hash_obj(((state_spec.get("split") or {}).get("cv") or {}).get("folds"))
+    carried = (state_e.get("carried_forward") or {}).get("name")
+    lb = {r.get("model"): r for r in (state_spec.get("training") or {}).get("leaderboard") or []}
     end["carried_forward_cv"] = (lb.get(carried) or {}).get("primary_mean") if carried else None
     if end.get("test") is not None and end["test_look"] <= e["start"].get("test_look", 0):
         end["test"] = None   # the evaluation shown is from before the iteration
-    bar = bar_result(spec, root, e)
+    bar = bar_result(state_spec, state_root, state_e)
     if adopted is not None:
         x = _experiment(e, adopted)
         x["status"] = "adopted"
@@ -842,17 +912,22 @@ def close_iteration(spec, root, spec_path, outcome, reason, do_restore=False, dr
     for x in e.get("experiments") or []:
         if x.get("status") in ("planned", "running", "passed", "failed", "error") and x.get("id") != adopted:
             x["status"] = "discarded" if x.get("status") in ("passed", "failed") else x["status"]
-    closed = {**e, "status": "closed", "closed_at": _now(), "outcome": outcome, "reason": reason.strip(), "end": end,
+    closed = {**state_e, "status": "closed", "closed_at": _now(), "outcome": outcome, "reason": reason.strip(), "end": end,
               "not_rerun": left, "bar_result": {k: bar.get(k) for k in ("status", "wins", "folds", "mean_diff", "spread",
                                                                          "detail")}}
     if dry_run:
         return {"ok": True, "dry_run": True, "entry": closed}
+    ws_notes = []
+    if ws_rel:
+        ws_notes, spec = _close_workspace(root, spec_path, spec, e, outcome)
+        if spec is None:
+            return {"ok": False, "problems": ws_notes}
     it = _iters(spec)
     it["entries"] = [closed if x.get("id") == e["id"] else x for x in it["entries"]]
     it["current"] = None
     backup, manifest = None, None
     version_state = _version(spec)
-    if outcome == "rolled_back" and not none_passed:
+    if outcome == "rolled_back" and not none_passed and not ws_rel:   # a worktree left the project as it was
         stamp = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
         backup = os.path.join(root, ".iterate_backup", stamp)
         snapshot(spec, root, spec_path, backup)
@@ -863,9 +938,24 @@ def close_iteration(spec, root, spec_path, outcome, reason, do_restore=False, dr
     ml_common.save(spec_path, spec)
     notes, ver = _settle_version(spec, root, spec_path, closed, outcome, reason.strip(), adopted=e.get("adopted"))
     ml_common.save(spec_path, spec)
-    notes += _settle_git(spec, root, spec_path, closed, outcome, ver, (manifest or {}).get("copied"))
+    notes = ws_notes + notes + _settle_git(spec, root, spec_path, closed, outcome, ver, (manifest or {}).get("copied"))
     return {"ok": True, "entry": closed, "backup": ml_common.relpath(backup, root) if backup else None,
             "notes": notes}
+
+
+def _close_workspace(root, spec_path, spec, e, outcome):
+    """Settle the worktree of an iteration: kept or stopped merges its branch into the version branch and copies its
+    data and models back; rolled back drops it. Returns (notes, the project's spec now), or (problems, None)."""
+    ws = _workspace()
+    if ws is None:
+        return ["workspace.py is not available, so the worktree cannot be settled."], None
+    slug, branch = os.path.basename(e["workspace"]), e.get("workspace_branch")
+    if outcome == "rolled_back":
+        return ws.drop(root, spec_path, slug, f"{e.get('version')}: final state (rolled back)"), spec
+    done, notes = ws.merge_in(root, spec_path, slug, branch, f"Keep {e.get('version')}: {e.get('hypothesis')}")
+    if not done:
+        return notes, None
+    return notes, ml_common.load(spec_path)
 
 
 def record_carry(spec, spec_path, cf):
@@ -889,6 +979,8 @@ def main():
     ap.add_argument("--outcome", choices=OUTCOMES, help="close: kept, rolled_back, or stopped")
     ap.add_argument("--reason", help="close: why")
     ap.add_argument("--restore", action="store_true", help="close --outcome rolled_back: restore the snapshot")
+    ap.add_argument("--worktree", action="store_true",
+                    help="open: run the iteration in its own git worktree, so the project changes only when it is kept")
     ap.add_argument("--adopted", help="close a round: the id of the experiment adopted into the project")
     ap.add_argument("--none-passed", action="store_true", help="close a round where no experiment passed the bar")
     ap.add_argument("--result", help="record-experiment: the experiment_result.json file")
@@ -901,6 +993,16 @@ def main():
     os.chdir(root)
     sys.path.insert(0, root)   # so src.features can be imported
     spec, _ = ml_common.load_or_create(spec_path)
+    e_open = _open_entry(spec)
+    ws_root = os.path.join(root, e_open["workspace"]) if e_open and e_open.get("workspace") else None
+    if (a.command in ("remaining", "carry-forward", "bar") and ws_root and not ml_common.workspace_info(root)
+            and os.path.exists(os.path.join(ws_root, ml_common.SPEC_NAME))):
+        # The iteration's work is in its worktree, so these read (and carry-forward writes) the worktree's spec
+        print(f"Iteration {e_open['id']} runs in {e_open['workspace']}/; reading the state there.", file=sys.stderr)
+        root, spec_path = ws_root, os.path.join(ws_root, ml_common.SPEC_NAME)
+        os.chdir(root)
+        sys.path.insert(0, root)
+        spec, _ = ml_common.load_or_create(spec_path)
 
     if a.command == "diagnose":
         d = diagnose(spec, root)
@@ -909,7 +1011,7 @@ def main():
     elif a.command == "open":
         if not a.plan:
             ap.error("give the plan file")
-        res = open_iteration(spec, root, spec_path, ml_common.load(a.plan), dry_run=a.dry_run)
+        res = open_iteration(spec, root, spec_path, ml_common.load(a.plan), dry_run=a.dry_run, worktree=a.worktree)
         if not res["ok"]:
             print("Nothing was changed. Problems:\n" + "\n".join("  " + p for p in res["problems"]))
             sys.exit(1)
@@ -919,7 +1021,7 @@ def main():
             return
         if res.get("dry_run"):
             print(f"Dry run. Iteration {e['id']} would save {len(res['files'])} files to {e['snapshot']}/ and rerun: "
-                  + " → ".join(e["rerun"]) + ".")
+                  + " → ".join(e["rerun"]) + "." + (" It would run in its own worktree." if res.get("worktree") else ""))
             return
         print(f"Opened iteration {e['id']} as {e.get('version')}: {e['hypothesis']}")
         for n_ in res.get("notes") or []:
@@ -927,6 +1029,9 @@ def main():
         print(f"Snapshot: {e['snapshot']}/ ({res['copied']} files; large data files not copied: "
               + (", ".join(res["skipped"]) or "none") + ")")
         print("Rerun, in this order: " + " → ".join(f"/{ml_common.STAGE_SKILL[s]}" for s in e["rerun"]))
+        if e.get("workspace"):
+            print(f"The iteration runs in {e['workspace']}/ on the branch {e['workspace_branch']}: cd there to run the "
+                  "stages and the commands below. Close it from the main project.")
         if "training" in e["rerun"]:
             print("Before training, run `iterate.py carry-forward` to add the previous champion to the models.")
 

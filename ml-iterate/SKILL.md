@@ -1,6 +1,6 @@
 ---
 name: ml-iterate
-description: Plan, track, and close an iteration of an ML project after the offline evaluation, a helper for the ML project skills. Diagnoses the evaluation and training results (test against CV, fold windows, bias, drift, weak slices, test set looks), agrees a hypothesis and the changes by stage with the user, snapshots the starting state to iterations/iter_N, records the iteration in the shared ml_spec.yaml, starts the next version (V2, V3) on its own git branch with its own MLflow parent run, lists the stages to rerun in order and hands off to each stage skill with the user's agreement, carries the previous champion forward so it is scored on the same folds, guards a second look at the test set, and compares iterations at the end. Use after /ml-offline-evaluation when the user wants to improve the model, iterate, try again, or compare iterations.
+description: Plan, track, and close an iteration of an ML project after the offline evaluation, a helper for the ML project skills. Diagnoses the evaluation and training results (test against CV, fold windows, bias, drift, weak slices, test set looks), agrees a hypothesis and the changes by stage with the user, snapshots the starting state to iterations/iter_N, records the iteration in the shared ml_spec.yaml, starts the next version (V2, V3) on its own git branch with its own MLflow parent run, optionally runs the iteration in its own git worktree so the project changes only when the result is kept, lists the stages to rerun in order and hands off to each stage skill with the user's agreement, carries the previous champion forward so it is scored on the same folds, guards a second look at the test set, and compares iterations at the end. Use after /ml-offline-evaluation when the user wants to improve the model, iterate, try again, or compare iterations.
 allowed-tools: Bash(python3 ${CLAUDE_SKILL_DIR}/scripts/*), Bash(.venv/bin/python ${CLAUDE_SKILL_DIR}/scripts/*)
 ---
 
@@ -15,7 +15,7 @@ It is a helper for the ML project skills, not a workflow step, and it does not r
 1. **Hand off, do not redo.** Every change is made by the stage skill that owns it, in its notebook. This skill only records, snapshots, sequences, and compares.
 2. **One iteration at a time.** Open a new iteration only after the last one is closed. If one is open, resume it.
 3. **Compare on CV first.** Models are compared on the CV folds. The test set is opened again only at the end, only with the user's explicit agreement, and every later look is recorded as optimistic.
-4. **Keep the history.** Snapshots are never deleted by the skill. A rollback backs up the current state first.
+4. **Keep the history.** Snapshots are never deleted by the skill. A rollback in place backs up the current state first; one in a worktree keeps its branch.
 5. **No raw data in the reply.** Use metrics, counts, and dates.
 6. **Use the script.** `scripts/iterate.py` does every write to the `iterations` section. Do not edit it by hand.
 7. **Never commit to main.** The script commits on the version branches only. Merging into main is the user's choice.
@@ -64,16 +64,23 @@ Say plainly when the honest finding may be that the data cannot support more. St
 
 ## Step 3: Agree the plan
 
-Ask with AskUserQuestion, one question per call: first which changes to make (`multiSelect: true`, the recommended ones first), then, after that answer, confirm the hypothesis, one sentence on what should improve and why. Write the plan to a YAML file in the scratch folder with the keys in `templates/iteration_plan.example.yaml`.
+Ask with AskUserQuestion, one question per call: first which changes to make (`multiSelect: true`, the recommended ones first), then, after that answer, confirm the hypothesis, one sentence on what should improve and why, and then where the iteration runs:
+
+* **In its own worktree (Recommended):** the stages run in `.worktrees/v2` on the branch `iter/v2`, and the project does not change until the iteration closes. Keeping the result merges the branch and copies the processed data and models back. Rolling back removes the worktree, with nothing to restore.
+* **In place:** the stages change the project itself, and rolling back restores the snapshot.
+
+Write the plan to a YAML file in the scratch folder with the keys in `templates/iteration_plan.example.yaml`.
 
 If AskUserQuestion is unavailable or the user is not present, make no changes: show the diagnosis and the proposed plan, and stop. The one exception is a round driven by **ml-autopilot**, which opens, records, and closes iterations through its own scripts (see "Rounds of experiments" below).
 
 ## Step 4: Open the iteration
 
 ```bash
-PY ${CLAUDE_SKILL_DIR}/scripts/iterate.py open <plan.yaml> --dry-run
-PY ${CLAUDE_SKILL_DIR}/scripts/iterate.py open <plan.yaml>
+PY ${CLAUDE_SKILL_DIR}/scripts/iterate.py open <plan.yaml> --dry-run [--worktree]
+PY ${CLAUDE_SKILL_DIR}/scripts/iterate.py open <plan.yaml> [--worktree]
 ```
+
+Add `--worktree` when the user chose a worktree in Step 3.
 
 It saves the starting state to `iterations/iter_<N-1>/` and records the iteration in the `iterations` section. The snapshot holds the spec, notebooks, `src`, models, docs, and the small result files; large data files are not copied, and their sizes are listed in `manifest.json`. It adds a decision and prints the rerun order: the earliest changed stage, then every later modelling stage.
 
@@ -84,6 +91,14 @@ It saves the starting state to `iterations/iter_<N-1>/` and records the iteratio
 * creates the version's MLflow parent run (`experiment V2`). Every stage run of the iteration is logged as its child, tagged `version = V2` and `candidate = true`. The alias `champion` stays on the previous version's model until the iteration is kept.
 
 The script prints a line for each of these. When git or MLflow is not available, it says so and the iteration still opens.
+
+**With `--worktree`,** the main project stays on `ml/v2` exactly as it was opened, and the work moves to `.worktrees/v2` on the branch `iter/v2`. That worktree links `.venv` and `data/raw` and has its own copies of `data/processed`, `models`, the snapshot, and the spec. The entry records `workspace` and `workspace_branch`. From then on:
+
+* `cd` to the worktree for Step 5. Every stage skill and `carry-forward` run there. A stage build in the main project is refused until the iteration closes.
+* `remaining`, `carry-forward`, and `bar` run from the main project read the worktree's state, so Step 1 still finds the open iteration.
+* `close` runs from the main project only.
+
+If no worktree can be made (no git, for example), the script says so and the iteration runs in place.
 
 ## Step 5: Hand off stage by stage
 
@@ -97,7 +112,7 @@ For each stage in the rerun order:
    PY ${CLAUDE_SKILL_DIR}/scripts/iterate.py carry-forward
    ```
 
-   It prints the previous champion as a model entry, named `<champion>_iter<N-1>`, with its tuned settings fixed and no tuning. Add that entry to the models, so it is scored on the same new folds and features as the new models. It also says when feature definitions changed under the same names, and when the old champion's inputs no longer exist. In that case, the comparison falls back to the recorded scores, which are not like for like.
+   It prints the previous champion as a model entry, named `<champion>_iter<N-1>` (a champion that was itself carried forward keeps its name), with its tuned settings fixed and no tuning. Add that entry to the models, so it is scored on the same new folds and features as the new models. It also says when feature definitions changed under the same names, and when the old champion's inputs no longer exist. In that case, the comparison falls back to the recorded scores, which are not like for like.
 4. **Guard the test set (evaluation only).** Before ml-offline-evaluation, ask with AskUserQuestion whether to open the test set again. Say how many times it has been opened, and that the new score will be optimistic. Offer to close the iteration on the CV result alone instead.
 5. **Check progress.** After each stage, run `iterate.py remaining` to see what is left.
 
@@ -132,11 +147,12 @@ PY ${CLAUDE_SKILL_DIR}/scripts/iterate.py close --outcome <outcome> --reason "<w
 PY ${CLAUDE_SKILL_DIR}/scripts/iterate.py close --outcome <outcome> --reason "<why>" [--restore]
 ```
 
-`--restore` is required for `rolled_back`, and only after the user agreed.
+`--restore` is required for `rolled_back` in place, and only after the user agreed. An iteration in a worktree needs no `--restore`, because the project never changed.
 
 Closing settles the version:
 
 * **Kept or stopped:** the version is promoted in MLflow (its stage runs become the current ones, and the alias `champion` moves to its champion, which also keeps the alias `champion-v2`), and git tags the version `v2`. Work stays on `ml/v2`.
+* **In a worktree:** before the steps below, kept or stopped merges `iter/v2` into `ml/v2` (the worktree's notebooks, `src`, docs, answers, and spec), copies `data/processed` and `models` back, and removes the worktree. Rolled back commits the worktree's final state on `iter/v2` and removes the worktree; nothing is restored and no backup is made, and the tag `v2-rolled-back` goes on `iter/v2`. The end state and the bar are read from the worktree in both cases. The branch `iter/v2` is kept for the record.
 * **Rolled back:** the version is marked rejected in MLflow, and the runs of the restored state are made current again. Git commits the restored files on `ml/v2`, tags it `v2-rolled-back`, switches back to `ml/v1`, and commits the spec there with the record of the rollback. The branch `ml/v2` is kept for the record. Then suggest `/ml-reconcile-notes`, because notes written in the earlier iteration may now disagree with the new decisions.
 
 ## Rounds of experiments (ml-autopilot)
@@ -154,7 +170,7 @@ Do not run these by hand while ml-autopilot is running a round; `autopilot.py ro
 
 Reply with these parts, in this order:
 
-1. **Files written:** the snapshot folder, `ml_spec.yaml`, and any backup folder, then the version, its git branch and tag, and its MLflow parent run.
+1. **Files written:** the snapshot folder, `ml_spec.yaml`, and any backup folder, then the version, its git branch and tag, its worktree and branch if it has one, and its MLflow parent run.
 2. **Summary:** the iteration's hypothesis and changes, then the `compare` table. Add two or three sentences: whether the new champion beats the carried old one on the same folds, and the test score with how many looks it took.
 3. **Problems:** stages that were not rerun, a carry forward that was not possible, and flags from the diagnosis that are still open, one sentence each.
 4. **Open questions:** one line each, with the stage that needs the answer.
@@ -162,4 +178,4 @@ Reply with these parts, in this order:
 
 ## The spec file
 
-`reference/spec_fields.md` describes the `iterations` and `version` sections. `scripts/ml_common.py`, `scripts/nb_common.py`, `scripts/tracking.py`, and `scripts/git_ops.py` are copies of the canonical files in `claude-skills/_ml_shared/`, kept in sync by `tools/sync_ml_shared.py`.
+`reference/spec_fields.md` describes the `iterations` and `version` sections. `scripts/ml_common.py`, `scripts/nb_common.py`, `scripts/tracking.py`, `scripts/git_ops.py`, and `scripts/workspace.py` are copies of the canonical files in `claude-skills/_ml_shared/`, kept in sync by `tools/sync_ml_shared.py`.

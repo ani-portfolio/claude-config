@@ -43,6 +43,7 @@ FREQUENCY_RANK = {"hourly": 1, "daily": 2, "weekly": 3, "monthly": 4}
 FREQUENCIES = tuple(FREQUENCY_RANK) + ("on_request",)
 PLATFORM_KINDS = ("default", "platform", "neutral")
 ENTRY_OUTCOMES = ("go", "no_go_build", "override")
+GATE_TESTS = ("diebold_mariano", "block_bootstrap")   # paired tests on the daily metric difference
 SUMMARY_JSON = os.path.join("docs", "ml_system_summary", "system_summary.json")
 
 
@@ -231,16 +232,29 @@ def check(spec, answers, defaults=None):
                   "The gate must judge models on the metric V1 was judged on.")
         elif status == "confirmed":
             B("gate metric", "registry.settings.gate.metric is empty.")
+        # The gate promotes on a fixed margin or on a paired significance test, never both
         std = ((spec.get("training") or {}).get("champion") or {}).get("std")
-        margin = gate.get("margin")
+        margin, test = gate.get("margin"), gate.get("test")
+        if margin is not None and test:
+            B("gate rule", "registry.settings.gate has both a margin and a test; keep one of them.")
+        elif margin is None and not test and status == "confirmed":
+            B("gate rule", "registry.settings.gate needs a margin or a test.")
         if margin is not None:
             if not isinstance(margin, (int, float)):
                 B("gate margin", f"registry.settings.gate.margin must be a number in the metric's units, not {margin!r}.")
             elif isinstance(std, (int, float)) and abs(margin) < std:
                 B("gate margin", f"The gate margin ({margin:g}) is smaller than the champion's CV spread (std {std:g}), "
                   "so the gate would swap champions on noise. Use a margin of at least the CV std.")
-        elif status == "confirmed":
-            B("gate margin", "registry.settings.gate.margin is empty.")
+        if test:
+            t = test if isinstance(test, dict) else {}
+            alpha = t.get("alpha")
+            if t.get("name") not in GATE_TESTS:
+                B("gate test", f"registry.settings.gate.test.name is {t.get('name')!r}; use one of {', '.join(GATE_TESTS)}.")
+            if not isinstance(alpha, (int, float)) or not 0 < alpha <= 0.2:
+                B("gate test", f"registry.settings.gate.test.alpha is {alpha!r}; use a significance level above 0 and "
+                  "at most 0.2.")
+            if t.get("sided") not in ("one", "two"):
+                B("gate test", f"registry.settings.gate.test.sided is {t.get('sided')!r}; use one or two.")
         if gate.get("promotion") not in (None, "auto", "manual"):
             B("gate promotion", f"registry.settings.gate.promotion is {gate.get('promotion')!r}; use auto or manual.")
         if gate.get("promotion") == "auto":

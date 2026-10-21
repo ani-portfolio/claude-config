@@ -12,7 +12,8 @@ stages), it:
    commit on each stage run;
 4. with --iterate (the first fixture only, unless --iterate-all), opens V2, carries the V1 champion forward, reruns
    training and evaluation, closes it as kept, and checks that the iteration bar was applied; then opens V3 and rolls
-   it back, and checks the branches, tags, aliases, and current runs.
+   it back, and checks the branches, tags, aliases, and current runs; then opens V4 in its own worktree (--worktree),
+   trains there while the project stays unchanged, closes it as kept, and checks the merge and the aliases.
 5. with --autopilot (the first fixture only), runs one ml-autopilot round the way the agents would: two screen
    experiments, each in its own git worktree, both counted as passed, then the combination of the two added during
    the round and trained in a third worktree; it advances the round until it settles, adopts what it settled on and
@@ -305,6 +306,51 @@ def run_iteration(c, root, spec_path, env, results):
     rid = spec["training"]["mlflow"]["run_id"]
     c.check(client.get_run(rid).data.tags.get("current") == "true", "V3 rolled back: the V2 training run is current again")
     c.check(git(root, "rev-list", "--count", "main").stdout.strip() == "1", "V3: main still holds only the first commit")
+
+    # V4: the same change in its own worktree, kept
+    plan = os.path.join(root, "kept_answers", "plan_v4.yaml")
+    with open(plan, "w") as f:
+        f.write("hypothesis: More trials, tried in a worktree.\nchanges:\n  - stage: training\n    change: More trials.\n")
+    r = subprocess.run(it + ["open", plan, "--worktree", "--json"], cwd=root, capture_output=True, text=True, env=env)
+    c.check(r.returncode == 0, "V4: iteration opened in a worktree", (r.stdout + r.stderr)[-400:])
+    ws = os.path.join(root, ".worktrees", "v4")
+    c.check(os.path.isdir(ws) and git(ws, "branch", "--show-current").stdout.strip() == "iter/v4",
+            "V4: worktree .worktrees/v4 on iter/v4")
+    before = ml_common.load(spec_path)["training"]["mlflow"]["run_id"]
+    r = subprocess.run(it + ["carry-forward", "--json"], cwd=root, capture_output=True, text=True, env=env)
+    c.check(r.returncode == 0, "V4: champion carried forward (from the main project, into the worktree)",
+            (r.stdout + r.stderr)[-400:])
+    ws_spec = ml_common.load(os.path.join(ws, ml_common.SPEC_NAME))
+    c.check(bool((ws_spec["iterations"]["entries"][-1].get("carried_forward") or {}).get("name")),
+            "V4: the carried champion is recorded in the worktree's spec")
+    tr_answers = ml_common.load(os.path.join(kept, "training.yaml"))
+    if r.returncode == 0:
+        tr_answers["models"] = list(tr_answers.get("models") or []) + [json.loads(r.stdout)["model"]]
+    training_v4 = os.path.join(kept, "training_v4.yaml")
+    ml_common.save(training_v4, tr_answers)
+    res = run_stage(root, env, "ml-model-training", training_v4, ["--rebuild", "--overwrite"])
+    c.check(res.get("exit_code") != 0, "V4: a stage build in the main project is refused")
+    res = run_stage(ws, env, "ml-model-training", training_v4, ["--rebuild", "--overwrite"])
+    c.check(res.get("exit_code") == 0, "V4 training in the worktree: exit code 0", res.get("stderr_tail", "")[-400:])
+    c.check(ml_common.load(spec_path)["training"]["mlflow"]["run_id"] == before,
+            "V4: the main project is unchanged while the worktree trains")
+    ws_spec = ml_common.load(os.path.join(ws, ml_common.SPEC_NAME))
+    entry = ws_spec["iterations"]["entries"][-1]
+    t = client.get_run(ws_spec["training"]["mlflow"]["run_id"]).data.tags
+    c.check(t.get("version") == "V4" and t.get("mlflow.parentRunId") == entry.get("mlflow_parent_run"),
+            "V4 training: run tagged V4, under the V4 parent run")
+    r = subprocess.run(it + ["close", "--outcome", "kept", "--reason", "Regression test keeps V4.", "--json"],
+                       cwd=root, capture_output=True, text=True, env=env)
+    c.check(r.returncode == 0, "V4: closed as kept", (r.stdout + r.stderr)[-400:])
+    c.check(not os.path.exists(ws), "V4 kept: the worktree is removed")
+    c.check(git(root, "branch", "--show-current").stdout.strip() == "ml/v4", "V4 kept: work is on ml/v4")
+    c.check(git(root, "merge-base", "--is-ancestor", "iter/v4", "ml/v4").returncode == 0, "V4 kept: iter/v4 merged")
+    spec = ml_common.load(spec_path)
+    c.check(spec["training"]["mlflow"]["run_id"] == ws_spec["training"]["mlflow"]["run_id"],
+            "V4 kept: the project's spec has the worktree's training run")
+    v4 = client.get_model_version_by_alias(name, "champion-v4").version
+    c.check(client.get_model_version_by_alias(name, "champion").version == v4, "V4 kept: alias champion moved to V4")
+    c.check(git(root, "rev-list", "--count", "main").stdout.strip() == "1", "V4: main still holds only the first commit")
 
 
 def run_system_design(c, root, spec_path, env):

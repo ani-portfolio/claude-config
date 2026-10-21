@@ -307,7 +307,7 @@ Written by ml-system-design through `scripts/design.py`, never by a notebook. Th
 | `platform` | `kind` (`default`, `platform`, or `neutral`, the stacks in the skill's `reference/defaults.yaml`) and `name` for a platform, such as `hopsworks`. |
 | `entry` | How the design passed the entry rule: `outcome` (`go`, `no_go_build` for an exploratory project whose matching answer still builds the system, or `override`), `answer`, `reason`, and `evaluation_decision`, the decision text it started from. |
 | `champion` | The champion (`training.champion.name`) the design was drafted for. A different champion marks the champion dependent parts out of date. |
-| `components` | One entry per component: `ingestion`, `data_validation`, `features`, `training`, `registry`, `inference`, `serving`, `label_feedback`, `monitoring`, `failure_handling`, `orchestration`, `testing`. Each has `needed`, `tool`, `settings`, and `reason`. Checked settings: `ingestion.settings.frequency`, `features.settings.served_inputs` (every name in `features.inputs`), `registry.settings.gate` (`metric`, the framing's primary metric; `margin` in the metric's units, at least the champion's CV std; `window_days`; `promotion`, `manual` or `auto`), `registry.settings.decides_champion` (required when the platform has its own registry), `inference.settings.mode` (`batch` or `online`) and `schedule` (`hourly`, `daily`, `weekly`, `monthly`, or `on_request`), `failure_handling.settings.fallback`. |
+| `components` | One entry per component: `ingestion`, `data_validation`, `features`, `training`, `registry`, `inference`, `serving`, `label_feedback`, `monitoring`, `failure_handling`, `orchestration`, `testing`. Each has `needed`, `tool`, `settings`, and `reason`. Checked settings: `ingestion.settings.frequency`, `features.settings.served_inputs` (every name in `features.inputs`), `registry.settings.gate` (`metric`, the framing's primary metric; exactly one of `margin`, in the metric's units and at least the champion's CV std, or `test`, a paired significance test on the daily metric difference with `name` (`diebold_mariano` or `block_bootstrap`), `alpha` (above 0, at most 0.2), and `sided` (`one` or `two`); `window_days`, optional with a test; `promotion`, `manual` or `auto`), `registry.settings.decides_champion` (required when the platform has its own registry), `inference.settings.mode` (`batch` or `online`) and `schedule` (`hourly`, `daily`, `weekly`, `monthly`, or `on_request`), `failure_handling.settings.fallback`. |
 | `champion_dependent` | The components redrafted when the champion changes: features, registry, monitoring, failure_handling. |
 | `warnings_accepted` | Judgement calls kept against a warning: `check` and `reason`. Each is also recorded in `decisions`. |
 | `risks` | `problem` and `resolution`. |
@@ -350,6 +350,7 @@ Each entry:
 | `rerun` | The stages to run again, in order: the earliest changed stage, then every later modelling stage. |
 | `start` | The state it started from: `champion`, `cv`, `test`, `test_look` (how many times the test set had been opened), and `data_version`. |
 | `snapshot` | The folder with a copy of that state: `iterations/iter_<id - 1>/`. It holds the spec, notebooks, `src`, models, docs, and the small result files, plus `manifest.json` listing what was copied and the sizes of the large data files that were not. |
+| `workspace`, `workspace_branch` | An iteration opened with `--worktree` only: its worktree (`.worktrees/v2`) and branch (`iter/v2`). The stages run there and the project does not change until the iteration closes: kept or stopped merges the branch into the version branch and copies `data/processed` and `models` back; rolled back removes the worktree with nothing to restore, and the tag `v2-rolled-back` marks the branch. Both are kept for the record. |
 | `carried_forward` | The previous champion as it was added to the new training run: `name`, `type`, `params`, `inputs`, and whether its inputs still exist. |
 | `status` | `open` or `closed`. |
 | `outcome`, `reason` | `kept` (the new state stays), `rolled_back` (the snapshot was restored), or `stopped` (no further change is worth making), and why. |
@@ -403,7 +404,12 @@ Written only by ml-autopilot. Absent in projects no agent has driven.
 
 ## The workspace file
 
-An experiment's worktree has `.ml_workspace.json` at its root (ignored by git): `experiment`, `id`, `iteration`, `version`, `parent_run`, `version_parent_run`, `main_root`, `workspace`, `branch`, `hypothesis`, `changes`, and `rerun`. `tracking.candidate` reads it, so every stage run in the worktree is logged as a candidate of the experiment without environment variables. `ml_common.autopilot_mode` treats a project with the file as driven by an agent.
+A worktree made by `workspace.py` has `.ml_workspace.json` at its root (ignored by git). `kind` says what it holds; a file without it is an experiment's.
+
+* `kind: experiment`, an ml-autopilot experiment: `experiment`, `id`, `iteration`, `version`, `parent_run`, `version_parent_run`, `main_root`, `workspace`, `branch`, `hypothesis`, `changes`, and `rerun`. `tracking.candidate` reads it, so every stage run in the worktree is logged as a candidate of the experiment without environment variables. `ml_common.autopilot_mode` treats a project with the file as driven by an agent.
+* `kind: iteration`, an ml-iterate iteration opened with `--worktree`: `version`, `iteration`, `parent_run`, `main_root`, `workspace`, and `branch`. A person works there, so it is not autopilot mode, and stage runs are logged from the spec's open iteration, as for an iteration in place.
+
+While either kind is open, a stage build in the main project is refused (`nb_common._refuse_during_round`).
 
 ## version
 
