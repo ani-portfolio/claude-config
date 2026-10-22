@@ -215,7 +215,9 @@ def project_paths(spec, root):
     """Absolute folder paths for the project, from spec['paths'] with defaults for missing keys."""
     paths = dict(DEFAULT_PATHS)
     paths.update({k: v for k, v in ((spec or {}).get("paths") or {}).items() if v})
-    return {k: (v if os.path.isabs(v) else os.path.normpath(os.path.join(root, v))) for k, v in paths.items()}
+    # Nested entries, such as the pipelines map ml-project-setup adds, are not folders of their own
+    return {k: (v if os.path.isabs(v) else os.path.normpath(os.path.join(root, v)))
+            for k, v in paths.items() if isinstance(v, str)}
 
 
 def relpath(path, root):
