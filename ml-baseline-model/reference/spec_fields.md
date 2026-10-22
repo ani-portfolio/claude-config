@@ -73,6 +73,7 @@ Folders relative to the project root. Skills read these instead of assuming a la
 | `src` | `src` | Reusable code, importable as `src`. |
 | `models` | `models` | Fitted pipelines and models. |
 | `docs` | `docs` | The business framing summary, the data dictionary, and later the model card. |
+| `pipelines` | empty | Written by `setup_project.py --add-deployment` after ml-system-design: the package of each pipeline the design needs, as `feature`, `training`, `inference`, and `monitoring`, for example `feature: src/feature_pipeline`. The build skills read it; ml-status suggests adding the layout while it is empty. |
 
 ## business
 

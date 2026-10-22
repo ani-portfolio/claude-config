@@ -266,7 +266,16 @@ def collect(spec, path):
         "eval_decision": ml_common.evaluation_decision(spec),
         "tracking": tracking_state(spec),
         "version": version_state(spec, root),
+        "deployment_layout": deployment_layout_state(spec),
     }
+
+
+def deployment_layout_state(spec):
+    """'missing' when the system design is confirmed but ml-project-setup has not added the pipeline packages yet
+    (paths.pipelines is empty), 'done' once it has, None before the design is confirmed."""
+    if ((spec.get("system") or {}).get("status")) != "confirmed":
+        return None
+    return "done" if ((spec.get("paths") or {}).get("pipelines")) else "missing"
 
 
 def version_state(spec, root):
@@ -480,6 +489,9 @@ def print_next(r):
     elif not n["step"] and not r.get("eval_decision") and not r.get("iteration"):
         print("**Next:** every step is done. Record a go, iterate, or no go decision on the evaluation; to improve the "
               "model, use `/ml-iterate`.")
+    elif not n["step"] and r.get("deployment_layout") == "missing":
+        print("**Next:** every step is done. Add the deployment layout (one package per pipeline under src/) with "
+              "`/ml-project-setup` (`setup_project.py <folder> --add-deployment`), then build the pipelines.")
     elif not n["step"]:
         print("**Next:** every step is done.")
     elif r["ml_needed"] == "no" and n["step"] in ("split", "features", "baseline", "training", "evaluation", "system"):

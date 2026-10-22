@@ -15,6 +15,9 @@ Then installs everything with `uv sync` (the project itself is installed in edit
 `from src.x import y` works from any folder), registers .venv as a named Jupyter kernel, and checks
 the result.
 
+After ml-system-design, --add-deployment adds the deployment layout (one package per pipeline under src/, the test
+levels, and their pyproject and CLAUDE.md settings), from deployment.py.
+
 A project that already uses requirements.txt keeps it: packages are installed with
 `uv pip install -r requirements.txt`, unless --to-pyproject is passed to move it to pyproject.toml.
 
@@ -773,6 +776,34 @@ def step_claude_md_workflow(root, rep, update=False):
                     "append it.")
 
 
+def spec_python(root):
+    """(python, writes_json): the project's Python when it has PyYAML, else this one. Without PyYAML anywhere,
+    ml_common.py writes the spec as JSON."""
+    def has_yaml(exe):
+        try:
+            return run([exe, "-c", "import yaml"]).returncode == 0
+        except OSError:   # no .venv yet
+            return False
+    py = str(venv_python(root))
+    if not has_yaml(py):
+        py = sys.executable
+    return py, not has_yaml(py)
+
+
+def write_spec_values(root, verb, values, py):
+    """Run `ml_common.py <verb> root <values>` (fill keeps existing values, merge takes these) on the project's
+    spec. Returns None, or the error output."""
+    script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ml_common.py")
+    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
+        json.dump(values, f)
+        tmp = f.name
+    try:
+        r = run([py, script, verb, "root", tmp, "--spec", str(root / SPEC_FILE), "--skill", "ml-project-setup"])
+    finally:
+        os.unlink(tmp)
+    return None if r.returncode == 0 else (r.stderr or r.stdout)[-1500:]
+
+
 def step_spec(root, name, description, pyver, kernel, display, paths, rep):
     """Create ml_spec.yaml, or fill empty project fields and paths in an existing one. Never overwrites values.
     Runs ml_common.py with the project's Python, which has PyYAML, so the spec is written as YAML."""
@@ -781,11 +812,7 @@ def step_spec(root, name, description, pyver, kernel, display, paths, rep):
     if rep.dry_run:
         rep.did(("fill empty project fields and paths in " if existed else "create ") + ml_common.SPEC_NAME)
         return
-    has_yaml = lambda exe: run([exe, "-c", "import yaml"]).returncode == 0
-    py = str(venv_python(root))
-    if not has_yaml(py):
-        py = sys.executable
-    as_json = not has_yaml(py)
+    py, as_json = spec_python(root)
     script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ml_common.py")
     if not existed:
         r = run([py, script, "init", "--spec", str(spec_file), "--name", name, "--skill", "ml-project-setup"]
@@ -799,18 +826,11 @@ def step_spec(root, name, description, pyver, kernel, display, paths, rep):
               # V1 is the first pass; ml-iterate opens V2, V3, ... Each version has its own git branch, ml/v<N>.
               "version": {"current": "V1", "branch": "ml/v1", "history": []},
               "git": {"auto_commit": True}}
-    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
-        json.dump(values, f)
-        tmp = f.name
-    try:
-        # A new spec takes this project's paths as they are. An existing spec keeps its values, and only
-        # empty fields are filled.
-        r = run([py, script, "fill" if existed else "merge", "root", tmp, "--spec", str(spec_file),
-                 "--skill", "ml-project-setup"])
-    finally:
-        os.unlink(tmp)
-    if r.returncode != 0:
-        rep.problem("could not update ml_spec.yaml:\n" + (r.stderr or r.stdout)[-1500:])
+    # A new spec takes this project's paths as they are. An existing spec keeps its values, and only empty fields
+    # are filled.
+    err = write_spec_values(root, "fill" if existed else "merge", values, py)
+    if err:
+        rep.problem("could not update ml_spec.yaml:\n" + err)
         return
     note = " (as JSON, because .venv has no PyYAML yet; it turns into YAML on the next write by a skill)" if as_json else ""
     rep.did(("fill empty project fields and paths in " if existed else "create ") + ml_common.SPEC_NAME + note)
@@ -861,11 +881,13 @@ SETUP_FILES = [".gitignore", "CLAUDE.md", "README.md", "pyproject.toml", "uv.loc
                "data/raw/.gitkeep", "data/processed/.gitkeep", "models/.gitkeep"]
 
 
-def step_git(root, rep):
+def step_git(root, rep, files=None, stage="setup", what="project set up"):
     """A git repository with an empty first commit on main and the work on the version branch (ml/v1). Nothing is
-    ever committed to main: the skills commit each stage build on the version branch, and a person merges."""
+    ever committed to main: the skills commit each stage build on the version branch, and a person merges.
+    files, stage, and what name a later commit, such as the deployment layout."""
     if rep.dry_run:
-        rep.did("create a git repository (empty first commit on main) and commit the set up on branch ml/v1")
+        rep.did("create a git repository (empty first commit on main) and commit the set up on branch ml/v1"
+                if files is None else f"commit the {what} on the version branch")
         return
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import git_ops
@@ -874,16 +896,43 @@ def step_git(root, rep):
         spec = ml_common.load(str(root / SPEC_FILE))
     except (SystemExit, Exception):  # noqa: BLE001  no PyYAML here: the version defaults to V1
         pass
+    version = ((spec.get("version") or {}).get("current")) or "V1"
     new_repo = not git_ops.is_repo(str(root))
     ok, msg = git_ops.init_repo(str(root), spec)
     if not ok:
         rep.problem(msg)
         return
     rep.did(msg)
-    paths = ["."] if new_repo else [p for p in SETUP_FILES if (root / p).exists()]
-    sha = git_ops.commit_paths(str(root), paths, "V1 setup: project set up by ml-project-setup", spec,
-                               trailers={"Version": "V1", "Stage": "setup", "Skill": "ml-project-setup"})
-    rep.did(f"commit the set up on {git_ops.branch(str(root))} ({sha[:8]})" if sha else "KEPT git: nothing new to commit")
+    wanted = files + [SPEC_FILE] if files else SETUP_FILES
+    paths = ["."] if new_repo else [p for p in wanted if (root / p).exists()]
+    sha = git_ops.commit_paths(str(root), paths, f"{version} {stage}: {what} by ml-project-setup", spec,
+                               trailers={"Version": version, "Stage": stage, "Skill": "ml-project-setup"})
+    rep.did(f"commit the {what} on {git_ops.branch(str(root))} ({sha[:8]})" if sha else "KEPT git: nothing new to commit")
+
+
+def step_deployment(root, uv, rep, update_claude_md):
+    """The deployment layout from the confirmed system design (deployment.py)."""
+    import deployment
+    spec = {}
+    try:
+        spec = ml_common.load(str(root / SPEC_FILE))
+    except SystemExit:  # no PyYAML in this Python: read the spec with the project's
+        spec = {k: spec_value(root, k) for k in ("system", "paths")}
+    src = project_paths(root, rep)["src"]
+
+    def uv_add_dev(package):
+        r = run([uv, "add", "--dev", package], cwd=str(root), env=uv_env())
+        if r.returncode == 0:
+            rep.did(f"add {package} to the dev dependency group")
+        else:
+            rep.problem(f"uv add --dev {package} failed:\n" + (r.stderr or r.stdout)[-800:])
+
+    def fill_spec(values):
+        err = write_spec_values(root, "fill", values, spec_python(root)[0])
+        if err:
+            rep.problem("could not update ml_spec.yaml:\n" + err)
+
+    return deployment.add(root, spec, src, rep, write_new, update_claude_md, uv_add_dev if uv else None, fill_spec)
 
 
 # ----------------------------------------------------------------------------- main
@@ -915,6 +964,9 @@ def main():
                     help="in an existing project, only create the git repository and commit on the version branch")
     ap.add_argument("--add-tracking", action="store_true",
                     help="in an existing project, only add mlflow and set up its MLflow experiment")
+    ap.add_argument("--add-deployment", action="store_true",
+                    help="after ml-system-design, only add the deployment layout: one package per pipeline under src/, "
+                         "the test levels, and the pyproject and CLAUDE.md settings for them (ask the user first)")
     ap.add_argument("--dry-run", action="store_true", help="print what would happen and change nothing")
     ap.add_argument("--status", action="store_true", help="report the state of an existing project and exit")
     ap.add_argument("--list-extras", action="store_true", help="print the extra package groups and exit")
@@ -945,6 +997,15 @@ def main():
         if not a.dry_run:
             root.mkdir(parents=True)
         rep.did(f"create {root}")
+
+    if a.add_deployment:
+        if not (root / SPEC_FILE).exists():
+            sys.exit(f"ERROR: --add-deployment is for an existing project with {SPEC_FILE}. Run the full setup.")
+        files = step_deployment(root, find_uv(), rep, a.update_claude_md)
+        if files and not a.no_git and not rep.problems:
+            step_git(root, rep, files, stage="deployment", what="deployment layout")
+        pyver = python_version(str(venv_python(root))) if venv_python(root).exists() else None
+        return finish(root, kernel_name(name), ml_common.kernel_display(name, pyver), pyver, rep, a.dry_run)
 
     uv = find_uv()
     if not uv:
@@ -1063,6 +1124,11 @@ def status(root, name):
     cm = root / "CLAUDE.md"
     if cm.exists():
         print(f"  CLAUDE.md {WORKFLOW_HEADING[3:]} section: {'yes' if WORKFLOW_HEADING in cm.read_text(encoding='utf-8') else 'no'}")
+    spec_file = root / SPEC_FILE
+    if spec_file.exists():
+        import deployment
+        spec = {k: spec_value(root, k) for k in ("system", "paths")}
+        print("  " + deployment.status_line(root, spec, paths["src"]))
     for line in rep.lines:
         print(f"  note: {line.replace('KEPT ', '')}")
     ver = python_version(vpy) if vpy.exists() else None

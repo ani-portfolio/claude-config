@@ -1,6 +1,6 @@
 ---
 name: ml-project-setup
-description: Set up a new or existing Python ML project folder, the first stage of the ML project skills. Uses uv to create a .venv and manage packages in pyproject.toml and uv.lock, creates the standard folders (data/raw, data/processed, notebooks, src, models, docs), the shared ml_spec.yaml that the later skills read and write, CLAUDE.md with the ML workflow, README.md, and .gitignore, sets up the project's MLflow experiment on the shared tracking server, traces Claude Code sessions into it, makes the folder a git repository with work on the branch ml/v1 (never main), and registers the .venv as a named Jupyter kernel with VS Code settings so editors always pick this project's Python. Also repairs projects where VS Code or Jupyter picks the wrong kernel. Use when asked to set up, scaffold, start, or initialize a project, or to fix a project's environment or kernel.
+description: Set up a new or existing Python ML project folder, the first stage of the ML project skills. Uses uv to create a .venv and manage packages in pyproject.toml and uv.lock, creates the standard folders (data/raw, data/processed, notebooks, src, models, docs), the shared ml_spec.yaml that the later skills read and write, CLAUDE.md with the ML workflow, README.md, and .gitignore, sets up the project's MLflow experiment on the shared tracking server, traces Claude Code sessions into it, makes the folder a git repository with work on the branch ml/v1 (never main), and registers the .venv as a named Jupyter kernel with VS Code settings so editors always pick this project's Python. Also repairs projects where VS Code or Jupyter picks the wrong kernel, and after ml-system-design adds the deployment layout (one package per feature, training, inference, and monitoring pipeline under src/, with test levels and a check that pipelines never import each other). Use when asked to set up, scaffold, start, or initialize a project, to fix a project's environment or kernel, or to set up the folders for building the pipelines.
 allowed-tools: Bash(python3 ${CLAUDE_SKILL_DIR}/scripts/*), Bash(.venv/bin/python ${CLAUDE_SKILL_DIR}/scripts/*)
 ---
 
@@ -108,6 +108,28 @@ After setup, every successful stage build commits the stage's files on the versi
 Commits use the user's git identity. When `git config user.name` or `user.email` is not set, the script commits nothing and reports a problem: give the user the two `git config --global` commands it printed, and rerun with `--add-git` after they set them.
 
 **Older projects.** `setup_project.py <folder> --add-git` makes the folder a repository (or moves an existing one off main) and commits the set up files. `--add-tracking` also adds the Claude Code tracing and the git set up. Ask the user first.
+
+## Deployment layout (after ml-system-design)
+
+Once `/ml-system-design` is confirmed, the project gets a second, smaller setup: the folders the production system is built in. `/ml-status` suggests it when every step is done and `paths.pipelines` in the spec is still empty. Ask the user first, because it changes `pyproject.toml` and `CLAUDE.md`, then run a dry run and the real run:
+
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/setup_project.py <folder> --add-deployment --dry-run
+python3 ${CLAUDE_SKILL_DIR}/scripts/setup_project.py <folder> --add-deployment
+```
+
+It reads the `system` section and stops with a problem when the design is not confirmed. It creates only what is missing (`scripts/deployment.py` has the details):
+
+| Item | Details |
+| --- | --- |
+| `src/<pipeline>/` | One package per pipeline the design needs: `feature_pipeline` (ingestion, data validation, features), `training_pipeline` (training, registry), `inference_pipeline` (inference, serving, failure handling), `monitoring_pipeline` (label feedback, monitoring). A pipeline whose components are all marked not needed is left out. Each gets `__init__.py` (a docstring with the design's tools), `jobs/` for the entry scripts and job settings the platform runs, and `tests/unit/` and `tests/component/`; `feature_pipeline` also gets `expectations/` when the design validates data. |
+| `tests/system/`, `conftest.py` | End to end tests, and a root `conftest.py` that marks every test by its level folder (`unit`, `component`, `system`) wherever it sits, so `pytest -m unit` runs one level across the project. |
+| `tests/unit/test_pipeline_boundaries.py` | Fails when a pipeline imports another pipeline, or a shared module in `src/` imports a pipeline. Pipelines communicate only through the feature store and the model registry. |
+| `pyproject.toml` | Only missing items: pipeline tests left out of the wheel (`exclude`), `src` in pytest's `testpaths`, `--import-mode=importlib` (test files in different pipelines may share a name), the three level markers, and pytest in the dev group. Existing values are never changed. A value that conflicts (for example `addopts` with another import mode) is a problem, and then `pyproject.toml` is left untouched. |
+| `CLAUDE.md` | A "Deployment layout" section. When it differs from the current layout, it is a problem, and `--update-claude-md` replaces that section only. |
+| `ml_spec.yaml` | `paths.pipelines`, the package of each pipeline, which the build skills read. |
+
+The files are committed on the version branch (`V1 deployment: deployment layout by ml-project-setup`) unless `--no-git` is passed. `--status` reports whether the layout is in place.
 
 ## Step 3: Preview, then run
 
