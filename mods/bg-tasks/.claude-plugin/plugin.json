@@ -1,0 +1,9 @@
+{
+  "name": "bg-tasks",
+  "version": "0.1.3",
+  "description": "Shows how many agents and background tasks are running, in the band above the prompt",
+  "types": "./types/index.d.ts",
+  "author": {
+    "name": "Ani"
+  }
+}

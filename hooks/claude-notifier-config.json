@@ -1,0 +1,36 @@
+{
+  "taskCompleted": {
+    "level": "sound+popup",
+    "sound": "Hero",
+    "label": "✅ finished"
+  },
+  "needsPermission": {
+    "level": "sound+popup",
+    "sound": "Glass",
+    "label": "❗ needs permission"
+  },
+  "asksQuestion": {
+    "level": "sound+popup",
+    "sound": "Funk",
+    "label": "❓ question"
+  },
+  "userPromptSubmit": {
+    "level": "sound+popup",
+    "sound": "",
+    "label": ""
+  },
+  "subagentCompleted": {
+    "level": "off",
+    "sound": "Pop",
+    "label": "✅ subagent finished"
+  },
+  "soundVolume": 1,
+  "minTaskDurationThreshold": 0,
+  "suppressSubagentInteractions": true,
+  "showChatTitle": true,
+  "showDetail": true,
+  "remoteAudio": {
+    "enabled": false,
+    "port": 47291
+  }
+}

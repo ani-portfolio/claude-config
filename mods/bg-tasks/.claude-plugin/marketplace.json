@@ -1,0 +1,6 @@
+{
+  "name": "ani-mods-bg-tasks",
+  "description": "Ani's personal Claude Code mods: background task counter.",
+  "owner": { "name": "Ani" },
+  "plugins": [{ "name": "bg-tasks", "source": "./" }]
+}

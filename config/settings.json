@@ -1,0 +1,106 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch"
+    ]
+  },
+  "model": "opus",
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"/Users/ani/.claude/hooks/claude-notifier-on-stop.js\""
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"/Users/ani/.claude/hooks/claude-notifier-on-permission.js\""
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "AskUserQuestion",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"/Users/ani/.claude/hooks/claude-notifier-on-question.js\""
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"/Users/ani/.claude/hooks/claude-notifier-on-prompt.js\""
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"/Users/ani/.claude/hooks/claude-notifier-on-subagent-stop.js\""
+          }
+        ]
+      }
+    ]
+  },
+  "enabledPlugins": {
+    "venv-status@ani-mods": true,
+    "bg-tasks@ani-mods-bg-tasks": true,
+    "usage-bar@ani-mods-usage-bar": true,
+    "side-chat@ani-mods-side-chat": true
+  },
+  "extraKnownMarketplaces": {
+    "ani-mods": {
+      "source": {
+        "source": "directory",
+        "path": "/Users/ani/Projects/claude-mods/venv-status"
+      }
+    },
+    "ani-mods-bg-tasks": {
+      "source": {
+        "source": "directory",
+        "path": "/Users/ani/Projects/claude-mods/bg-tasks"
+      }
+    },
+    "ani-mods-usage-bar": {
+      "source": {
+        "source": "directory",
+        "path": "/Users/ani/Projects/claude-mods/usage-bar"
+      }
+    },
+    "ani-mods-side-chat": {
+      "source": {
+        "source": "directory",
+        "path": "/Users/ani/Projects/claude-mods/side-chat"
+      }
+    }
+  },
+  "modelSettings": {
+    "claude-sonnet-5": {
+      "effortLevel": "high"
+    },
+    "claude-opus-5": {
+      "effortLevel": "medium"
+    },
+    "claude-opus-5-5": {
+      "effortLevel": "high"
+    }
+  },
+  "tui": "fullscreen",
+  "theme": "dark"
+}

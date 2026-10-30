@@ -198,5 +198,5 @@ Reply with these parts, in this order:
 * `scripts/workspace.py`: the worktree of each experiment (create, adopt, discard, list).
 * `reference/checkpoints.md`: what each checkpoint shows and what resuming does.
 * `templates/backlog.example.yaml`: the format of backlog items.
-* The subagent is `agents/ml-experimenter.md` in the claude-skills folder, linked into `~/.claude/agents/`.
+* The subagent is `agents/ml-experimenter.md` at the top of the claude-config repo, linked into `~/.claude/agents/`.
 * `scripts/ml_common.py`, `scripts/nb_common.py`, `scripts/tracking.py`, `scripts/git_ops.py`, and `scripts/workspace.py` are copies of the canonical files in `claude-skills/_ml_shared/`, kept in sync by `tools/sync_ml_shared.py`.

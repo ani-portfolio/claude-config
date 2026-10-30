@@ -1,0 +1,6 @@
+{
+  "name": "ani-mods",
+  "description": "Ani's personal Claude Code mods.",
+  "owner": { "name": "Ani" },
+  "plugins": [{ "name": "venv-status", "source": "./" }]
+}
