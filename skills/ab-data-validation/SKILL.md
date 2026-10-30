@@ -8,7 +8,7 @@ allowed-tools: Bash(python3 ${CLAUDE_SKILL_DIR}/scripts/*), Bash(.venv/bin/pytho
 
 Check whether the test's data can be trusted before any effect is estimated. Most wrong A/B conclusions come from broken assignment or logging rather than from the statistics, and the sample ratio test catches many of them. The output is `notebooks/ab03_validation.ipynb`. Running it writes the `data` section (the column mapping and the timing of each column) and the `validation` section of `ab_spec.yaml`, and saves one row per unit to `data/processed/ab_units.parquet` for the analysis.
 
-This is step 3 of the A/B testing skills: ab-project-setup, ab-test-framing, ab-test-design, **ab-data-validation**, ab-analysis, ab-segment-analysis, and ab-readout. The shared conventions are in `AB_CONVENTIONS.md` in the claude-skills folder.
+This is step 3 of the A/B testing skills: ab-project-setup, ab-test-framing, ab-test-design, **ab-data-validation**, ab-analysis, ab-segment-analysis, and ab-readout. The shared conventions are in `AB_CONVENTIONS.md` in the skills folder.
 
 ## Ground rules
 

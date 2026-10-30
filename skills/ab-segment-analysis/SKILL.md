@@ -8,7 +8,7 @@ allowed-tools: Bash(python3 ${CLAUDE_SKILL_DIR}/scripts/*), Bash(.venv/bin/pytho
 
 Find out whether the effect differs between groups of units, without fooling ourselves. With enough segments, some will look different by chance, so the question for each column is whether the effects differ more than chance allows, corrected across columns. The output is `notebooks/ab05_segments.ipynb`, and running it writes the `segments` section of `ab_spec.yaml`.
 
-This is step 5 of the A/B testing skills: ab-project-setup, ab-test-framing, ab-test-design, ab-data-validation, ab-analysis, **ab-segment-analysis**, and ab-readout. It is optional. The shared conventions are in `AB_CONVENTIONS.md` in the claude-skills folder.
+This is step 5 of the A/B testing skills: ab-project-setup, ab-test-framing, ab-test-design, ab-data-validation, ab-analysis, **ab-segment-analysis**, and ab-readout. It is optional. The shared conventions are in `AB_CONVENTIONS.md` in the skills folder.
 
 ## Ground rules
 

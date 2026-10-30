@@ -10,7 +10,7 @@ skills and which lives in _ml_shared/. Each skill listed in _ab_shared/skills.tx
 and the skills that compute statistics (see STATS_SKILLS below) also keep:
     scripts/ab_core.py          copy of _ab_shared/ab_core.py
 
-Run from the claude-skills folder:
+Run from the skills folder:
     python3 tools/sync_ab_shared.py          # report copies that differ or are missing (exit 1 if any)
     python3 tools/sync_ab_shared.py --fix    # copy the canonical files into every listed skill
 

@@ -8,7 +8,7 @@ allowed-tools: Bash(python3 ${CLAUDE_SKILL_DIR}/scripts/*), Bash(.venv/bin/pytho
 
 An evaluation often shows something to improve: folds that missed a seasonal pattern, a trend that cannot follow the test period, a model that does no better than a simpler one. Iterating means changing earlier stages and running every later one again. This skill keeps that honest and on record. It says why each iteration happened, what it changed, which stages ran again, how the new champion compares with the old one on the same folds, and how many times the test set has been seen.
 
-It is a helper for the ML project skills, not a workflow step, and it does not redo any stage itself: each stage skill still runs with its own questions. The shared conventions are in `ML_CONVENTIONS.md` in the claude-skills folder.
+It is a helper for the ML project skills, not a workflow step, and it does not redo any stage itself: each stage skill still runs with its own questions. The shared conventions are in `ML_CONVENTIONS.md` in the skills folder.
 
 ## Ground rules
 
@@ -179,4 +179,4 @@ Reply with these parts, in this order:
 
 ## The spec file
 
-`reference/spec_fields.md` describes the `iterations` and `version` sections. `scripts/ml_common.py`, `scripts/nb_common.py`, `scripts/tracking.py`, `scripts/git_ops.py`, and `scripts/workspace.py` are copies of the canonical files in `claude-skills/_ml_shared/`, kept in sync by `tools/sync_ml_shared.py`.
+`reference/spec_fields.md` describes the `iterations` and `version` sections. `scripts/ml_common.py`, `scripts/nb_common.py`, `scripts/tracking.py`, `scripts/git_ops.py`, and `scripts/workspace.py` are copies of the canonical files in `skills/_ml_shared/`, kept in sync by `tools/sync_ml_shared.py`.

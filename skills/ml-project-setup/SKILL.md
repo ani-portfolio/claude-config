@@ -8,7 +8,7 @@ allowed-tools: Bash(python3 ${CLAUDE_SKILL_DIR}/scripts/*), Bash(.venv/bin/pytho
 
 Create a project folder with its own Python environment and the shared project spec, and make sure VS Code and Jupyter select that environment every time.
 
-This is the first step of the ML project skills: ml-project-setup, ml-business-framing (anchors only), ml-data-discovery, ml-business-framing (full framing), ml-problem-framing, ml-eda-report, then ml-train-test-split, ml-feature-engineering, ml-baseline-model, ml-model-training, ml-offline-evaluation, and ml-system-design. Every stage reads `ml_spec.yaml` first and writes only its own section. The conventions shared by all of them are in `ML_CONVENTIONS.md` in the claude-skills folder.
+This is the first step of the ML project skills: ml-project-setup, ml-business-framing (anchors only), ml-data-discovery, ml-business-framing (full framing), ml-problem-framing, ml-eda-report, then ml-train-test-split, ml-feature-engineering, ml-baseline-model, ml-model-training, ml-offline-evaluation, and ml-system-design. Every stage reads `ml_spec.yaml` first and writes only its own section. The conventions shared by all of them are in `ML_CONVENTIONS.md` in the skills folder.
 
 ## Ground rules
 
@@ -41,7 +41,7 @@ The script uses [uv](https://docs.astral.sh/uv/) to create `.venv`, record packa
 | `.vscode/settings.json` | Points VS Code at `.venv` and runs notebooks from the project root. Merged into an existing file. |
 | Jupyter kernel | Registered under the project name (for example `martech_adtech_data`), shown as "`<name>` (.venv, Python 3.11.x)". |
 | MLflow tracking | `mlflow` is added to the dependencies, and the project gets its own experiment, `ml/<project>`, on the shared MLflow server. The address, the experiment, and the UI link are written to the `tracking` section of the spec. Skip with `--no-tracking`. |
-| Claude Code tracing | `mlflow autolog claude` writes `.claude/settings.json` and `.claude/settings.local.json`, so every Claude Code session in the project is traced into the project's experiment. A SessionStart hook (`tools/session_env.py` in the claude-skills folder) puts the session id in `ML_AGENT_SESSION`, and runs and commits are tagged with it. Skipped with `--no-tracking`. |
+| Claude Code tracing | `mlflow autolog claude` writes `.claude/settings.json` and `.claude/settings.local.json`, so every Claude Code session in the project is traced into the project's experiment. A SessionStart hook (`tools/session_env.py` in the skills folder) puts the session id in `ML_AGENT_SESSION`, and runs and commits are tagged with it. Skipped with `--no-tracking`. |
 | Git repository | A new repository gets one empty commit on main ("Initialize repository"), then the branch `ml/v1` with a commit of the set up files. In an existing repository, only the set up files are committed, on `ml/v1` when main is checked out, or on the branch already checked out otherwise. The spec gets `version: {current: V1, branch: ml/v1}` and `git: {auto_commit: true}`. Skip with `--no-git`. |
 | Editable install | `uv sync` installs the project itself in editable mode (hatchling build), so `from src.utils import x` works from notebooks, scripts, and tests in any folder, and new modules under `src/` work without reinstalling. |
 
@@ -86,14 +86,14 @@ On macOS, the AirPlay Receiver also listens on port 5000. If `status` says the s
 Check the server with:
 
 ```bash
-python3 ~/Projects/claude-skills/tools/mlflow_server.py status
+python3 ~/Projects/claude-config/skills/tools/mlflow_server.py status
 ```
 
 When it is not running, tell the user the one time setup and let them run it, because it adds a login item to their computer:
 
 ```bash
 uv tool install mlflow
-python3 ~/Projects/claude-skills/tools/mlflow_server.py install-agent   # macOS: starts now and at every login
+python3 ~/Projects/claude-config/skills/tools/mlflow_server.py install-agent   # macOS: starts now and at every login
 ```
 
 `mlflow_server.py start` runs it until logout instead. A server that is down does not fail the setup: the script reports that tracking is not set up yet, and `--add-tracking` sets it up later.

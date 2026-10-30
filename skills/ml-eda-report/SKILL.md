@@ -8,7 +8,7 @@ allowed-tools: Bash(python3 ${CLAUDE_SKILL_DIR}/scripts/*), Bash(.venv/bin/pytho
 
 Profile a dataset with summary statistics and plots, and rank the data quality issues found.
 
-This is step 6 of the ML project skills: ml-project-setup, ml-business-framing (anchors only), ml-data-discovery, ml-business-framing (full framing), ml-problem-framing, **ml-eda-report**, then ml-train-test-split, ml-feature-engineering, ml-baseline-model, ml-model-training, and ml-offline-evaluation. By this step, ml-data-discovery has described the data and drafted the data dictionary, and ml-problem-framing has confirmed the target. ml-eda-report takes the target, its type, and the date and ID columns from the spec, analyses the target, checks for leakage, and checks the data against the framing. Its findings go to the spec's `eda` section, which the modelling skills read. The shared conventions are in `ML_CONVENTIONS.md` in the claude-skills folder.
+This is step 6 of the ML project skills: ml-project-setup, ml-business-framing (anchors only), ml-data-discovery, ml-business-framing (full framing), ml-problem-framing, **ml-eda-report**, then ml-train-test-split, ml-feature-engineering, ml-baseline-model, ml-model-training, and ml-offline-evaluation. By this step, ml-data-discovery has described the data and drafted the data dictionary, and ml-problem-framing has confirmed the target. ml-eda-report takes the target, its type, and the date and ID columns from the spec, analyses the target, checks for leakage, and checks the data against the framing. Its findings go to the spec's `eda` section, which the modelling skills read. The shared conventions are in `ML_CONVENTIONS.md` in the skills folder.
 
 The skill also works on any data file outside such a project, with or without a target. A run without a target ("discovery mode") profiles the data only.
 
@@ -214,7 +214,7 @@ See `reference/checks.md` for every threshold and how each check works.
 
 The `eda` section of `ml_spec.yaml` is replaced on every run. It holds the mode, the source and report paths, rows and columns, the detected grain, duplicate rows, the main date range, column names grouped by role, target statistics (with class balance for up to ten classes), the ten features most associated with the target, leakage suspects, suggested exclusions (identifiers, free text, personal data, and strong leakage suspects), the grouped issues, the framing checks (targeted mode), and the framing hints (both modes). It never holds raw rows or values other than the target's class labels and the date range. The run also records the data file in `data.sources`, fills `data.date_col` and `data.id_cols` when they were empty and the user gave them, and adds open questions for failed checks and unresolved leakage suspects (marked with the stage that needs the answer). It never changes `framing` or `data.excluded_cols`. Suggest exclusions to the user instead.
 
-The spec code is `scripts/ml_common.py`, the notebook helpers are in `scripts/nb_common.py`, and field meanings are in `reference/spec_fields.md`. All three are copies of the canonical files in `claude-skills/_ml_shared/`, kept in sync by `tools/sync_ml_shared.py`.
+The spec code is `scripts/ml_common.py`, the notebook helpers are in `scripts/nb_common.py`, and field meanings are in `reference/spec_fields.md`. All three are copies of the canonical files in `skills/_ml_shared/`, kept in sync by `tools/sync_ml_shared.py`.
 
 ## Large data
 

@@ -6,7 +6,7 @@ allowed-tools: Bash(python3 ${CLAUDE_SKILL_DIR}/scripts/*), Bash(.venv/bin/pytho
 
 # ML Status
 
-Report where an ML project stands and what to do next. This skill is a helper for the ML project skills (ml-project-setup, ml-business-framing (anchors only), ml-data-discovery, ml-business-framing (full framing), ml-problem-framing, ml-eda-report, then the modelling skills). It is not a workflow step itself: it only reads `ml_spec.yaml` and the project files, and never changes anything. The shared conventions are in `ML_CONVENTIONS.md` in the claude-skills folder.
+Report where an ML project stands and what to do next. This skill is a helper for the ML project skills (ml-project-setup, ml-business-framing (anchors only), ml-data-discovery, ml-business-framing (full framing), ml-problem-framing, ml-eda-report, then the modelling skills). It is not a workflow step itself: it only reads `ml_spec.yaml` and the project files, and never changes anything. The shared conventions are in `ML_CONVENTIONS.md` in the skills folder.
 
 ## Ground rules
 

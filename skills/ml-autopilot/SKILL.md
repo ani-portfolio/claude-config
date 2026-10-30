@@ -8,7 +8,7 @@ allowed-tools: Bash(python3 ${CLAUDE_SKILL_DIR}/scripts/*), Bash(.venv/bin/pytho
 
 This skill drives the ML project skills from start to finish so that a person only has to answer what only a person can answer. It does no stage work itself. Every stage is run by its own skill, called with the argument `autopilot`, which makes the skill take its proposed answers and record them as drafts. The person is asked for the goal at the start and reviews the work at checkpoints. Everything in between runs without them.
 
-It is a helper for the ML project skills, not a workflow step. The shared conventions are in `ML_CONVENTIONS.md` in the claude-skills folder, under "Running without a person".
+It is a helper for the ML project skills, not a workflow step. The shared conventions are in `ML_CONVENTIONS.md` in the skills folder, under "Running without a person".
 
 ## Ground rules
 
@@ -199,4 +199,4 @@ Reply with these parts, in this order:
 * `reference/checkpoints.md`: what each checkpoint shows and what resuming does.
 * `templates/backlog.example.yaml`: the format of backlog items.
 * The subagent is `agents/ml-experimenter.md` at the top of the claude-config repo, linked into `~/.claude/agents/`.
-* `scripts/ml_common.py`, `scripts/nb_common.py`, `scripts/tracking.py`, `scripts/git_ops.py`, and `scripts/workspace.py` are copies of the canonical files in `claude-skills/_ml_shared/`, kept in sync by `tools/sync_ml_shared.py`.
+* `scripts/ml_common.py`, `scripts/nb_common.py`, `scripts/tracking.py`, `scripts/git_ops.py`, and `scripts/workspace.py` are copies of the canonical files in `skills/_ml_shared/`, kept in sync by `tools/sync_ml_shared.py`.

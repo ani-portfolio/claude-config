@@ -8,7 +8,7 @@ allowed-tools: Bash(python3 ${CLAUDE_SKILL_DIR}/scripts/*), Bash(.venv/bin/pytho
 
 Decide how big the test must be before it runs, so a real effect of the size that matters is likely to be detected and a result that is not significant means something. For a finished test, check whether it was big enough. The output is `notebooks/ab02_design.ipynb`, and running it writes the `design` section of `ab_spec.yaml`. The analysis reuses its significance level, sidedness, and minimum effect.
 
-This is step 2 of the A/B testing skills: ab-project-setup, ab-test-framing, **ab-test-design**, ab-data-validation, ab-analysis, ab-segment-analysis, and ab-readout. It is optional for a test that has already run. The shared conventions are in `AB_CONVENTIONS.md` in the claude-skills folder.
+This is step 2 of the A/B testing skills: ab-project-setup, ab-test-framing, **ab-test-design**, ab-data-validation, ab-analysis, ab-segment-analysis, and ab-readout. It is optional for a test that has already run. The shared conventions are in `AB_CONVENTIONS.md` in the skills folder.
 
 ## Ground rules
 

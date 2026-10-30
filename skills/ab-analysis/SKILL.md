@@ -8,7 +8,7 @@ allowed-tools: Bash(python3 ${CLAUDE_SKILL_DIR}/scripts/*), Bash(.venv/bin/pytho
 
 Estimate what the treatment did, and how sure we can be. The metrics, variants, and ship rule come from the framing, the significance level and minimum effect from the design, and the column mapping from the validation, so nothing is chosen after seeing the result. The output is `notebooks/ab04_analysis.ipynb`. Running it saves every comparison to `data/processed/ab_results.parquet` and writes the `analysis` section of `ab_spec.yaml`.
 
-This is step 4 of the A/B testing skills: ab-project-setup, ab-test-framing, ab-test-design, ab-data-validation, **ab-analysis**, ab-segment-analysis, and ab-readout. The shared conventions are in `AB_CONVENTIONS.md` in the claude-skills folder.
+This is step 4 of the A/B testing skills: ab-project-setup, ab-test-framing, ab-test-design, ab-data-validation, **ab-analysis**, ab-segment-analysis, and ab-readout. The shared conventions are in `AB_CONVENTIONS.md` in the skills folder.
 
 ## Ground rules
 

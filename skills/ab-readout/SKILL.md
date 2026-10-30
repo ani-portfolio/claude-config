@@ -8,7 +8,7 @@ allowed-tools: Bash(python3 ${CLAUDE_SKILL_DIR}/scripts/*), Bash(.venv/bin/pytho
 
 Turn the analysis into something the decision owner can act on: what moved, how sure we are, whether the data can be trusted, and a recommendation tied to the ship rule agreed before the test. The output is `notebooks/ab06_readout.ipynb`, and running it writes the `readout` section of `ab_spec.yaml` and the stakeholder document `docs/ab_readout.md`.
 
-This is step 6 of the A/B testing skills: ab-project-setup, ab-test-framing, ab-test-design, ab-data-validation, ab-analysis, ab-segment-analysis, and **ab-readout**. The shared conventions are in `AB_CONVENTIONS.md` in the claude-skills folder.
+This is step 6 of the A/B testing skills: ab-project-setup, ab-test-framing, ab-test-design, ab-data-validation, ab-analysis, ab-segment-analysis, and **ab-readout**. The shared conventions are in `AB_CONVENTIONS.md` in the skills folder.
 
 ## Ground rules
 

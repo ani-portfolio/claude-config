@@ -15,7 +15,7 @@ The outputs are:
 * `models/champion_<name>.joblib`: the champion pipeline, refitted on every training row.
 * The `training` section of `ml_spec.yaml`.
 
-This is step 10 of the ML project skills: ml-project-setup, ml-business-framing (anchors only), ml-data-discovery, ml-business-framing (full framing), ml-problem-framing, ml-eda-report, ml-train-test-split, ml-feature-engineering, ml-baseline-model, **ml-model-training**, then ml-offline-evaluation. Every skill reads `ml_spec.yaml` first and writes only its own section. The shared conventions are in `ML_CONVENTIONS.md` in the claude-skills folder. `reference/models.md` explains every model type, the tuning, the run log, and the checks.
+This is step 10 of the ML project skills: ml-project-setup, ml-business-framing (anchors only), ml-data-discovery, ml-business-framing (full framing), ml-problem-framing, ml-eda-report, ml-train-test-split, ml-feature-engineering, ml-baseline-model, **ml-model-training**, then ml-offline-evaluation. Every skill reads `ml_spec.yaml` first and writes only its own section. The shared conventions are in `ML_CONVENTIONS.md` in the skills folder. `reference/models.md` explains every model type, the tuning, the run log, and the checks.
 
 ## Ground rules
 
@@ -101,4 +101,4 @@ Reply with these parts, in this order:
 
 ## The spec file
 
-`reference/spec_fields.md` describes the `training` section. `scripts/ml_common.py`, `scripts/nb_common.py`, `scripts/split_core.py`, and `scripts/model_core.py` (model menu, search spaces, tuning, and the run log) are copies of the canonical files in `claude-skills/_ml_shared/`, kept in sync by `tools/sync_ml_shared.py`.
+`reference/spec_fields.md` describes the `training` section. `scripts/ml_common.py`, `scripts/nb_common.py`, `scripts/split_core.py`, and `scripts/model_core.py` (model menu, search spaces, tuning, and the run log) are copies of the canonical files in `skills/_ml_shared/`, kept in sync by `tools/sync_ml_shared.py`.

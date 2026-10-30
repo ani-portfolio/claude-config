@@ -25,7 +25,7 @@ features). Without it, the model uses every input. Types:
 cross_validate(models, data, inputs, target, folds, metrics, task, config) fits every model inside every fold and
 returns the per fold metrics and the out of fold predictions. Nothing here touches the test set.
 
-The canonical copy lives in claude-skills/_ml_shared/model_core.py, copied into the modelling skills by
+The canonical copy lives in skills/_ml_shared/model_core.py, copied into the modelling skills by
 tools/sync_ml_shared.py.
 """
 

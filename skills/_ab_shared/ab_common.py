@@ -2,9 +2,9 @@
 """Shared code for the A/B testing skills: project root, folder layout, kernel naming, and the shared spec file
 (ab_spec.yaml).
 
-The canonical copy lives in claude-skills/_ab_shared/ab_common.py. Every A/B testing skill keeps an identical copy
+The canonical copy lives in skills/_ab_shared/ab_common.py. Every A/B testing skill keeps an identical copy
 in its own scripts folder so it works on its own. Edit the canonical copy, then run
-`python3 tools/sync_ab_shared.py --fix` from the claude-skills folder to update the copies.
+`python3 tools/sync_ab_shared.py --fix` from the skills folder to update the copies.
 
 It follows ml_common.py from the ML project skills: the same function names, so nb_common.py works with either
 library, and the same project layout, so an A/B test can live in a folder set up by ml-project-setup.
