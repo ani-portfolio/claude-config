@@ -59,34 +59,34 @@
     ]
   },
   "enabledPlugins": {
-    "venv-status@ani-mods": true,
     "bg-tasks@ani-mods-bg-tasks": true,
+    "side-chat@ani-mods-side-chat": true,
     "usage-bar@ani-mods-usage-bar": true,
-    "side-chat@ani-mods-side-chat": true
+    "venv-status@ani-mods": true
   },
   "extraKnownMarketplaces": {
-    "ani-mods": {
-      "source": {
-        "source": "directory",
-        "path": "/Users/ani/Projects/claude-mods/venv-status"
-      }
-    },
     "ani-mods-bg-tasks": {
       "source": {
         "source": "directory",
-        "path": "/Users/ani/Projects/claude-mods/bg-tasks"
-      }
-    },
-    "ani-mods-usage-bar": {
-      "source": {
-        "source": "directory",
-        "path": "/Users/ani/Projects/claude-mods/usage-bar"
+        "path": "/Users/ani/Projects/claude-config/mods/bg-tasks"
       }
     },
     "ani-mods-side-chat": {
       "source": {
         "source": "directory",
-        "path": "/Users/ani/Projects/claude-mods/side-chat"
+        "path": "/Users/ani/Projects/claude-config/mods/side-chat"
+      }
+    },
+    "ani-mods-usage-bar": {
+      "source": {
+        "source": "directory",
+        "path": "/Users/ani/Projects/claude-config/mods/usage-bar"
+      }
+    },
+    "ani-mods": {
+      "source": {
+        "source": "directory",
+        "path": "/Users/ani/Projects/claude-config/mods/venv-status"
       }
     }
   },
@@ -98,7 +98,7 @@
       "effortLevel": "medium"
     },
     "claude-opus-5-5": {
-      "effortLevel": "high"
+      "effortLevel": "medium"
     }
   },
   "tui": "fullscreen",

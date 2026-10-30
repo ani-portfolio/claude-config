@@ -168,3 +168,7 @@ def test_check_reports_a_broken_skill_link(repo, home, tmp_path):
     result = run(repo, home, "--check")
     assert result.returncode == 1
     assert "gone" in result.stdout
+
+
+def test_script_can_be_run_directly():
+    assert os.access(SCRIPT, os.X_OK)
