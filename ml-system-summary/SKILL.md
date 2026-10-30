@@ -34,6 +34,7 @@ These rules apply for the whole task.
    * **Not found**: no evidence in code or documentation. Write "Not found in this codebase." Never describe a typical setup to fill the gap.
 6. **Every discrepancy is reported.** Whenever documentation and code disagree, describe the system as the code has it, and add a row to the Documentation and Code Discrepancies section.
 7. **No sensitive content.** Never copy secrets, credentials, connection strings, tokens, customer data, or sample records into the outputs. Name the config key instead of its value.
+8. **Standard practice first.** When you recommend or offer options for ML experimentation design or ML system design, start from the industry standard pattern, then adapt it to this project's requirements. State both parts explicitly in the question or reply: the standard pattern, and whether the recommendation follows it or departs from it, why, and what a departure gives up. If there is no clear standard, or practice varies by scale or platform, say so instead of presenting one approach as the standard. Check platform specific claims against current docs.
 
 ## Source of truth
 

@@ -20,7 +20,8 @@ These apply for the whole task.
 2. **Never change the data.** The report only reads data. Suggest fixes, but do not apply them to the user's files.
 3. **Use the scripts.** All analysis goes through `scripts/run_eda.py` or `scripts/eda_core.py`, and spec changes go through `scripts/ml_common.py`, so results are consistent between runs, between markdown and notebook output, and with the other skills.
 4. **Autopilot.** When the arguments include `autopilot` (ml-autopilot or an ml-experimenter agent is driving), or the project root has `.ml_workspace.json`, no person is present. Do not call AskUserQuestion. Take the recommended answer to every question, or the change the driver gave for this stage. Record each answer you took in `assumptions` with `source: autopilot draft`, and never set a framing to `status: confirmed`. Run the stage script with `--json`, and reply with its result and one line per assumption.
-5. **Writing style.** Use simple language and full sentences. Use plain headings. Do not use dashes as punctuation.
+5. **Standard practice first.** When you recommend or offer options for ML experimentation design or ML system design, start from the industry standard pattern, then adapt it to this project's requirements. State both parts explicitly in the question or reply: the standard pattern, and whether the recommendation follows it or departs from it, why, and what a departure gives up. If there is no clear standard, or practice varies by scale or platform, say so instead of presenting one approach as the standard. Check platform specific claims against current docs.
+6. **Writing style.** Use simple language and full sentences. Use plain headings. Do not use dashes as punctuation.
 
 ## Step 1: Work out the input and the output
 

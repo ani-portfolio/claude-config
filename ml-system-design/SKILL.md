@@ -18,7 +18,8 @@ This is step 12 of the ML project skills: ml-project-setup, ml-business-framing 
 4. **Design only.** Write no pipeline, service, or test code, and install nothing. The skill writes only `docs/system_design.md`, the `system` section, and the shared lists, all through `scripts/design.py`.
 5. **Never with autopilot.** Infrastructure choices commit accounts, keys, and money, so a person always answers. When the arguments include `autopilot`, or the project root has `.ml_workspace.json`, stop and say that ml-system-design needs a person and is out of the autopilot's scope.
 6. **No raw rows.** Work with the spec, column names, and summary numbers only.
-7. **Writing style.** Use simple language and full sentences. Use plain headings. Do not use dashes as punctuation.
+7. **Standard practice first.** When you recommend or offer options for ML experimentation design or ML system design, start from the industry standard pattern, then adapt it to this project's requirements. State both parts explicitly in the question or reply: the standard pattern, and whether the recommendation follows it or departs from it, why, and what a departure gives up. If there is no clear standard, or practice varies by scale or platform, say so instead of presenting one approach as the standard. Check platform specific claims against current docs.
+8. **Writing style.** Use simple language and full sentences. Use plain headings. Do not use dashes as punctuation.
 
 ## Step 1: Find the project and the spec
 

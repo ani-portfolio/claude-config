@@ -18,7 +18,8 @@ This is step 5 of the ML project skills: ml-project-setup, ml-business-framing (
 4. **No raw data in the reply.** Use column names and the summary numbers in the spec, the dictionary, and the notebook checks. Do not print rows or values.
 5. **Use the scripts.** `scripts/make_notebook.py` builds and runs the notebook, and the notebook writes the spec. Do not edit the `framing` section or `data.excluded_cols` by hand.
 6. **Autopilot.** When the arguments include `autopilot` (ml-autopilot or an ml-experimenter agent is driving), or the project root has `.ml_workspace.json`, no person is present. Do not call AskUserQuestion. Take the recommended answer to every question, or the change the driver gave for this stage. Record each answer you took in `assumptions` with `source: autopilot draft`, and never set a framing to `status: confirmed`. Run the stage script with `--json`, and reply with its result and one line per assumption. Draft every field, including `v1_criteria`, and leave the section as `status: draft`.
-7. **Writing style.** Use simple language and full sentences. Use plain headings. Do not use dashes as punctuation.
+7. **Standard practice first.** When you recommend or offer options for ML experimentation design or ML system design, start from the industry standard pattern, then adapt it to this project's requirements. State both parts explicitly in the question or reply: the standard pattern, and whether the recommendation follows it or departs from it, why, and what a departure gives up. If there is no clear standard, or practice varies by scale or platform, say so instead of presenting one approach as the standard. Check platform specific claims against current docs.
+8. **Writing style.** Use simple language and full sentences. Use plain headings. Do not use dashes as punctuation.
 
 ## Step 1: Find the project and read what came before
 

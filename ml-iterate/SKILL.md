@@ -19,7 +19,8 @@ It is a helper for the ML project skills, not a workflow step, and it does not r
 5. **No raw data in the reply.** Use metrics, counts, and dates.
 6. **Use the script.** `scripts/iterate.py` does every write to the `iterations` section. Do not edit it by hand.
 7. **Never commit to main.** The script commits on the version branches only. Merging into main is the user's choice.
-8. **Writing style.** Use simple language and full sentences. Use plain headings. Do not use dashes as punctuation.
+8. **Standard practice first.** When you recommend or offer options for ML experimentation design or ML system design, start from the industry standard pattern, then adapt it to this project's requirements. State both parts explicitly in the question or reply: the standard pattern, and whether the recommendation follows it or departs from it, why, and what a departure gives up. If there is no clear standard, or practice varies by scale or platform, say so instead of presenting one approach as the standard. Check platform specific claims against current docs.
+9. **Writing style.** Use simple language and full sentences. Use plain headings. Do not use dashes as punctuation.
 
 ## Step 1: Find the project and the spec
 

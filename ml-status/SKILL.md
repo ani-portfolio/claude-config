@@ -12,7 +12,8 @@ Report where an ML project stands and what to do next. This skill is a helper fo
 
 1. **Read only.** Never edit the spec, the dictionary, or any project file, and never run another skill on the user's behalf. Suggest what to run.
 2. **No raw data.** The status uses the spec and file timestamps only.
-3. **Writing style.** Use simple language and full sentences. Use plain headings. Do not use dashes as punctuation.
+3. **Standard practice first.** When you recommend or offer options for ML experimentation design or ML system design, start from the industry standard pattern, then adapt it to this project's requirements. State both parts explicitly in the question or reply: the standard pattern, and whether the recommendation follows it or departs from it, why, and what a departure gives up. If there is no clear standard, or practice varies by scale or platform, say so instead of presenting one approach as the standard. Check platform specific claims against current docs.
+4. **Writing style.** Use simple language and full sentences. Use plain headings. Do not use dashes as punctuation.
 
 ## Step 1: Find the project
 

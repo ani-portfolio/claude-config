@@ -20,7 +20,8 @@ Nothing here needs the data, and no results are looked at. Column names are matc
 4. **Push back.** One primary metric. A unit that matches the randomisation. A decision that depends on the result. A minimum effect with a reason. Explain each objection in one or two sentences and suggest a better answer.
 5. **One question at a time.** Ask exactly one question per message, then wait for the answer before asking the next. Never send a numbered list of questions, and never put more than one question in an AskUserQuestion call. Lead with proposed answers. Keep the interview short by skipping what the request, the spec, the conversation, or an earlier answer already settles.
 6. **Use the scripts.** `scripts/make_notebook.py` builds and runs the notebook, and the notebook writes the spec. Do not edit the `framing` section by hand.
-7. **Writing style.** Use simple language and full sentences. Use plain headings. Do not use dashes as punctuation.
+7. **Standard practice first.** When you recommend or offer options for A/B test design or analysis, start from the industry standard pattern, then adapt it to this project's requirements. State both parts explicitly in the question or reply: the standard pattern, and whether the recommendation follows it or departs from it, why, and what a departure gives up. If there is no clear standard, or practice varies by scale or platform, say so instead of presenting one approach as the standard. Check platform specific claims against current docs.
+8. **Writing style.** Use simple language and full sentences. Use plain headings. Do not use dashes as punctuation.
 
 ## Step 1: Find the project and the spec
 

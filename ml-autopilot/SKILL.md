@@ -20,7 +20,8 @@ It is a helper for the ML project skills, not a workflow step. The shared conven
 6. **Use the scripts.** `scripts/autopilot.py` writes the `autopilot` section. `iterate.py` (in ml-iterate) writes the `iterations` section, and `scripts/workspace.py` makes and removes worktrees. Do not edit either section by hand.
 7. **The system design is out of scope.** Never run ml-system-design, even when ml-status names it as the next step: it commits accounts, keys, and money, so the person runs it after the autopilot finishes. `autopilot.py next` skips it.
 8. **No raw data in the reply or in the checkpoint page.** Use metrics, counts, and dates.
-9. **Writing style.** Use simple language and full sentences. Use plain headings. Do not use dashes as punctuation.
+9. **Standard practice first.** When you recommend or offer options for ML experimentation design or ML system design, start from the industry standard pattern, then adapt it to this project's requirements. State both parts explicitly in the question or reply: the standard pattern, and whether the recommendation follows it or departs from it, why, and what a departure gives up. If there is no clear standard, or practice varies by scale or platform, say so instead of presenting one approach as the standard. Check platform specific claims against current docs.
+10. **Writing style.** Use simple language and full sentences. Use plain headings. Do not use dashes as punctuation.
 
 ## Step 1: Find the project and the next action
 

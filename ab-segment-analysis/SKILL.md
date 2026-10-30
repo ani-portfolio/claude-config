@@ -17,7 +17,8 @@ This is step 5 of the A/B testing skills: ab-project-setup, ab-test-framing, ab-
 3. **A segment is a hypothesis, not a launch plan.** A segment where the effect differs is a reason for the next test, not for shipping to that segment alone.
 4. **No raw rows.** Report segment sizes, effects, intervals, and test statistics.
 5. **Use the scripts.** `scripts/make_notebook.py` builds and runs the notebook. Do not edit the `segments` section by hand.
-6. **Writing style.** Use simple language and full sentences. Use plain headings. Do not use dashes as punctuation.
+6. **Standard practice first.** When you recommend or offer options for A/B test design or analysis, start from the industry standard pattern, then adapt it to this project's requirements. State both parts explicitly in the question or reply: the standard pattern, and whether the recommendation follows it or departs from it, why, and what a departure gives up. If there is no clear standard, or practice varies by scale or platform, say so instead of presenting one approach as the standard. Check platform specific claims against current docs.
+7. **Writing style.** Use simple language and full sentences. Use plain headings. Do not use dashes as punctuation.
 
 ## Step 1: Find the project and check the gate
 

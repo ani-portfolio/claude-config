@@ -64,7 +64,7 @@ The notebook rules of `ML_CONVENTIONS.md` apply unchanged: one numbered notebook
 
 ## SKILL.md structure
 
-The same order as `ML_CONVENTIONS.md`: frontmatter (`name`, a `description` that says what it does, which step it is, and when to use it, and `allowed-tools`), purpose and workflow sentence, **Ground rules**, **Step 1: Find the project and the spec** (plus `gate` for the analysis, segments, and readout), the skill's own steps, asking one question at a time (see `ML_CONVENTIONS.md`), and what happens without AskUserQuestion, build and run the notebook, and **Report back** with Files written, Summary, Problems, Open questions, and Next step.
+The same order as `ML_CONVENTIONS.md`: frontmatter (`name`, a `description` that says what it does, which step it is, and when to use it, and `allowed-tools`), purpose and workflow sentence, **Ground rules** (including standard practice first, as in `ML_CONVENTIONS.md`), **Step 1: Find the project and the spec** (plus `gate` for the analysis, segments, and readout), the skill's own steps, asking one question at a time (see `ML_CONVENTIONS.md`), and what happens without AskUserQuestion, build and run the notebook, and **Report back** with Files written, Summary, Problems, Open questions, and Next step.
 
 ## Writing style
 

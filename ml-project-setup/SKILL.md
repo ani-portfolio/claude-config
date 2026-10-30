@@ -15,7 +15,8 @@ This is the first step of the ML project skills: ml-project-setup, ml-business-f
 1. **Never delete or overwrite.** The script only creates what is missing. Existing files are kept as they are, and an existing `.venv` is reused. A broken `.venv` is only replaced after the user agrees, and even then it is moved aside, not deleted.
 2. **Use the scripts.** All setup goes through `scripts/setup_project.py`, and spec changes go through `scripts/ml_common.py`, so every project gets the same layout, kernel naming, and spec as the other skills.
 3. **Ask before risky fixes.** Changing `.vscode/settings.json`, rebuilding `.venv`, or appending to an existing `CLAUDE.md` needs the user's agreement first.
-4. **Writing style.** Use simple language and full sentences. Use plain headings. Do not use dashes as punctuation.
+4. **Standard practice first.** When you recommend or offer options for ML experimentation design or ML system design, start from the industry standard pattern, then adapt it to this project's requirements. State both parts explicitly in the question or reply: the standard pattern, and whether the recommendation follows it or departs from it, why, and what a departure gives up. If there is no clear standard, or practice varies by scale or platform, say so instead of presenting one approach as the standard. Check platform specific claims against current docs.
+5. **Writing style.** Use simple language and full sentences. Use plain headings. Do not use dashes as punctuation.
 
 ## Which Python runs the scripts
 

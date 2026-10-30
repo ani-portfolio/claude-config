@@ -16,7 +16,8 @@ This is step 6 of the A/B testing skills: ab-project-setup, ab-test-framing, ab-
 2. **The recommendation follows the agreed ship rule.** If the user wants a recommendation that the rule does not support, record the reason in `decisions`. The decision itself stays with the owner.
 3. **State the caveats plainly.** An unknown planned split, a validation override, a short test, a small control group, or a result that is only inconclusive goes in `risks`.
 4. **Use the scripts.** `scripts/make_notebook.py` builds and runs the notebook, and `scripts/readout_doc.py` writes the document from the spec. Do not edit `docs/ab_readout.md` by hand.
-5. **Writing style.** Use simple language and full sentences. Use plain headings. Do not use dashes as punctuation.
+5. **Standard practice first.** When you recommend or offer options for A/B test design or analysis, start from the industry standard pattern, then adapt it to this project's requirements. State both parts explicitly in the question or reply: the standard pattern, and whether the recommendation follows it or departs from it, why, and what a departure gives up. If there is no clear standard, or practice varies by scale or platform, say so instead of presenting one approach as the standard. Check platform specific claims against current docs.
+6. **Writing style.** Use simple language and full sentences. Use plain headings. Do not use dashes as punctuation.
 
 ## Step 1: Find the project and the results
 

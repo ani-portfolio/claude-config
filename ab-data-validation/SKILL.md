@@ -18,7 +18,8 @@ This is step 3 of the A/B testing skills: ab-project-setup, ab-test-framing, ab-
 4. **Never change input data.** Read from the raw data folder, write only to `data_processed`, `notebooks`, and the spec.
 5. **No raw rows.** Report counts, shares, and test statistics. The labels of the group column may be shown, because they must be matched to the variants.
 6. **Use the scripts.** `scripts/inspect_data.py` proposes the answers and `scripts/make_notebook.py` builds and runs the notebook. Do not edit the `data` or `validation` sections by hand.
-7. **Writing style.** Use simple language and full sentences. Use plain headings. Do not use dashes as punctuation.
+7. **Standard practice first.** When you recommend or offer options for A/B test design or analysis, start from the industry standard pattern, then adapt it to this project's requirements. State both parts explicitly in the question or reply: the standard pattern, and whether the recommendation follows it or departs from it, why, and what a departure gives up. If there is no clear standard, or practice varies by scale or platform, say so instead of presenting one approach as the standard. Check platform specific claims against current docs.
+8. **Writing style.** Use simple language and full sentences. Use plain headings. Do not use dashes as punctuation.
 
 ## Step 1: Find the project and the spec
 

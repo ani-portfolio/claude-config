@@ -15,7 +15,8 @@ This is the first step of the A/B testing skills: **ab-project-setup**, ab-test-
 1. **Never delete or overwrite.** The script only creates what is missing. Existing files are kept, and an existing `.venv` is reused. A broken `.venv` is only replaced after the user agrees, and even then it is moved aside, not deleted.
 2. **Use the script.** All setup goes through `scripts/setup_ab.py`. It runs the setup of the **ml-project-setup** skill with the A/B testing spec and documents, so both workflows lay out a project the same way. ml-project-setup must be installed next to this skill.
 3. **Ask before risky fixes.** Changing `.vscode/settings.json`, rebuilding `.venv`, or appending to an existing `CLAUDE.md` needs the user's agreement first.
-4. **Writing style.** Use simple language and full sentences. Use plain headings. Do not use dashes as punctuation.
+4. **Standard practice first.** When you recommend or offer options for A/B test design or analysis, start from the industry standard pattern, then adapt it to this project's requirements. State both parts explicitly in the question or reply: the standard pattern, and whether the recommendation follows it or departs from it, why, and what a departure gives up. If there is no clear standard, or practice varies by scale or platform, say so instead of presenting one approach as the standard. Check platform specific claims against current docs.
+5. **Writing style.** Use simple language and full sentences. Use plain headings. Do not use dashes as punctuation.
 
 ## Which Python runs the script
 
