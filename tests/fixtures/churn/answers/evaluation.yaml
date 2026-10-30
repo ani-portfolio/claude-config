@@ -1,0 +1,28 @@
+models: all
+slices:
+  categorical:
+  - plan
+  - region
+  numeric_bins:
+    days_since_last_order: 4
+    orders_90d: 4
+    spend_90d: 4
+  time:
+    column: scoring_date
+    period: W
+  new_entity: customer_id
+  missing: []
+  protected: []
+  min_rows: 100
+  min_positives: 30
+bootstrap:
+  n: 200
+  cluster: scoring_date
+  seed: 0
+reasoning: {}
+risks: []
+assumptions: []
+open_questions: []
+decisions: []
+resolved_questions: []
+

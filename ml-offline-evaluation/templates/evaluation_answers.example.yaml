@@ -1,0 +1,27 @@
+# Example answers file for: make_notebook.py <this file>
+# Start from the output of make_notebook.py --suggest, which proposes the slices and the bootstrap grouping.
+models: all                  # "all" (the champion, the other ML models, and the baselines), or a list of names.
+                             # The champion is always scored.
+slices:
+  categorical: [plan, region]          # sliced by each value
+  numeric_bins:                        # column: number of quantile bins, cut on the training rows
+    days_since_last_order: 4
+    spend_90d: 4
+  time: {column: scoring_date, period: W}   # W (weekly) or M (monthly)
+  new_entity: customer_id              # rows whose entity was or was not seen in training
+  missing: []                          # columns sliced by missing or present
+  protected: []                        # columns named in the fairness constraint
+  min_rows: 100                        # smaller slices are shown but marked too small
+  min_positives: 30                    # classification only
+bootstrap:
+  n: 200                     # draws for the 95% intervals
+  cluster: scoring_date      # values drawn together: the date for a time split, the group for a group split,
+                             # null for single rows
+  seed: 0
+reasoning:
+  slices: Plan and region are how the retention team splits its budget; the three numeric slices are the top features.
+risks: []
+assumptions: []
+open_questions: []
+decisions: []
+resolved_questions: []

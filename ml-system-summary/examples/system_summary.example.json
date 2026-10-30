@@ -1,0 +1,123 @@
+{
+  "system_name": "Customer LTV Model for Paid Acquisition Bidding",
+  "repo": "example/ltv-bidding",
+  "generated_on": "2026-10-04",
+  "discrepancy_count": 0,
+  "framing": {
+    "business_goal": [
+      "Improve customer acquisition spend across paid channels by targeting potential high value customers"
+    ],
+    "assumptions": [
+      "Digital channels only (Meta, Google)",
+      "CAC alone is a weak business metric, since low value customers can also have low CAC",
+      "Model predicts 30 day LTV; the 12 month LTV sent to ad platforms is 30 day LTV × a cohort multiplier (brand, channel, country)"
+    ],
+    "problem_framing": [
+      "Unit of prediction: customer_id",
+      "Prediction horizon: first 30 days after signup",
+      "Label: 30 day LTV",
+      "Task type: Regression",
+      "Offline metric: RMSE on mean of deciles",
+      "Serving: Online inference, or hourly micro batch",
+      "Downstream decision: value based bidding signal sent to ad platforms",
+      "Business KPI: Maximize ROAS",
+      "Guardrails: Signups and CAC hold",
+      "Online test: Treatment vs control, campaign split"
+    ]
+  },
+  "components": {
+    "raw_data": {
+      "status": "confirmed",
+      "bullets": ["Historical order data per customer_id", "Attribution touchpoints per customer_id"],
+      "evidence": ["src/data/load_orders.py", "src/data/load_attribution.py"]
+    },
+    "feature_pipeline": {
+      "status": "confirmed",
+      "bullets": ["Point in time correct joins", "Feature engineering", "Builds the 30 day LTV label for training"],
+      "evidence": ["src/features/pipeline.py (build_features)"]
+    },
+    "engineered_features": {
+      "status": "confirmed",
+      "bullets": [
+        "On demand: channel, campaign type, creative type",
+        "On demand: initial plan type, order amount, promotion depth, subscription length",
+        "Precomputed: historical average 30 day LTV by channel, brand, country",
+        "Label: 30 day LTV"
+      ],
+      "evidence": ["src/features/definitions.py"]
+    },
+    "feature_store": {
+      "status": "confirmed",
+      "bullets": [
+        "Offline and online stores",
+        "Online store is a snapshot of the offline store, to reduce training and serving skew",
+        "Holds precomputed features only; on demand features are computed at inference",
+        "Offline store holds the label",
+        "Features are versioned"
+      ],
+      "evidence": ["feature_repo/feature_store.yaml"]
+    },
+    "training_pipeline": {
+      "status": "confirmed",
+      "bullets": ["Gradient boosted trees", "Stratified K fold CV by country, channel, brand", "Offline metric: RMSE on mean of deciles"],
+      "evidence": ["src/train/train.py (train_model)"]
+    },
+    "trained_model": {
+      "status": "confirmed",
+      "bullets": ["LightGBM regressor artifact"],
+      "evidence": ["src/train/train.py"]
+    },
+    "model_registry": {
+      "status": "confirmed",
+      "bullets": ["Model version", "Champion or challenger tag", "Model parameters and offline metrics", "Training data snapshot id and version"],
+      "evidence": ["src/train/register.py"]
+    },
+    "deployment_experimentation": {
+      "status": "confirmed",
+      "bullets": [
+        "Shadow deployment to validate LTV values",
+        "Canary at 1% of traffic, then 5%, and so on",
+        "1% holdout bids without the LTV signal to measure the counterfactual",
+        "Exploration on low LTV customers",
+        "Champion and challenger promotion gate"
+      ],
+      "evidence": ["deploy/rollout.yaml", "src/experiments/assign.py"]
+    },
+    "inference_pipeline": {
+      "status": "confirmed",
+      "bullets": [
+        "Online inference",
+        "Fetch cohort average 30 day LTV from the online store",
+        "Compute on demand features with the shared sklearn pipeline object",
+        "Log predictions with the request payload"
+      ],
+      "evidence": ["src/serve/app.py (predict)"]
+    },
+    "predictions_decision": {
+      "status": "confirmed",
+      "bullets": [
+        "LTV per customer_id with hashed PID for the ad platform join",
+        "Guardrail: cap at the 99th percentile",
+        "Fallback to cohort average LTV if inference fails"
+      ],
+      "evidence": ["src/serve/postprocess.py"]
+    },
+    "monitoring": {
+      "status": "confirmed",
+      "bullets": [
+        "KS and JS drift tests on raw data",
+        "Concept drift on predictions (alert if RMSE is worse than the baseline model)",
+        "System health: throughput and latency",
+        "Data quality: missing values and schema changes"
+      ],
+      "evidence": ["src/monitoring/drift.py"]
+    }
+  },
+  "feedback_loops": {
+    "retraining_trigger": {"present": true, "label": "Trigger retraining if drift is detected"},
+    "behaviour_feedback": {
+      "present": true,
+      "label": "LTV model influences bidding, which changes customer behaviour and shifts the raw data distribution"
+    }
+  }
+}

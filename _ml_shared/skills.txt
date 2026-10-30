@@ -1,0 +1,18 @@
+# ML project skills that keep copies of the files in _ml_shared/. One folder name per line: the workflow steps in
+# order, then helper skills such as ml-status.
+ml-project-setup
+ml-business-framing
+ml-data-discovery
+ml-problem-framing
+ml-eda-report
+ml-train-test-split
+ml-feature-engineering
+ml-baseline-model
+ml-model-training
+ml-offline-evaluation
+ml-system-design
+ml-status
+ml-reconcile-notes
+ml-review
+ml-iterate
+ml-autopilot

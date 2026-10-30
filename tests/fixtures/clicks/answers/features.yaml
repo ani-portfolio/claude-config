@@ -1,0 +1,36 @@
+config:
+  numeric:
+  - i1
+  - x
+  categorical:
+  - c1
+  high_cardinality:
+  - c_hash
+  date_parts: {}
+  days_since: []
+  log: []
+  ratios: []
+  lags: []
+  rolling: []
+  custom: true
+  date_col: null
+  target: target
+  min_shift_days: 0
+  target_min_shift_days: 0
+  rare_min_frequency: 0.01
+  exclude: []
+excluded: {}
+feature_reasons:
+  i1: numeric
+  c1: categorical, 3 values
+  c_hash: 'high cardinality, 4,960 values: TargetEncoder'
+  x: numeric
+leakage_threshold: 0.9
+confirmed_safe: []
+reasoning: {}
+risks: []
+assumptions: []
+open_questions: []
+decisions: []
+resolved_questions: []
+

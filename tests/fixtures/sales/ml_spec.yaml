@@ -1,0 +1,76 @@
+spec_version: 1
+project:
+  name: regress-sales
+  description: null
+  owner: null
+  python: null
+  created: '2026-10-09T11:02:39'
+  updated: '2026-10-16T14:43:56'
+paths:
+  data_raw: data/raw
+  data_processed: data/processed
+  notebooks: notebooks
+  src: src
+  models: models
+  docs: docs
+business:
+  status: confirmed
+  business_goal: null
+  business_kpi: null
+  decision_supported: null
+  users: null
+  capacity: null
+  current_approach: null
+  outcome: null
+  output_use: null
+  v1_bar_intent: null
+  ml_needed: 'yes'
+  ml_needed_reason: null
+  constraints:
+    latency: null
+    interpretability: null
+    fairness: null
+    data_access: null
+    other: []
+  out_of_scope: []
+  risks: []
+discovery: {}
+framing:
+  status: confirmed
+  task_type: forecasting
+  target:
+    name: sales
+    definition: null
+    positive_class: null
+    outcome_window: null
+    exists_in_data: true
+    construction: null
+    label_delay: null
+  unit_of_prediction: null
+  entity_id_cols:
+  - store_id
+  population: null
+  prediction_time:
+    description: null
+    column: date
+    feature_cutoff: null
+    cadence: null
+    horizon: 28 days
+  success:
+    primary_metric: null
+    secondary_metrics: []
+    v1_bar: null
+    guardrails: []
+data:
+  sources: []
+  date_col: date
+  id_cols: []
+  excluded_cols: []
+eda:
+  mode: targeted
+  source: data/raw/sales.parquet
+assumptions: []
+open_questions: []
+decisions: []
+notebooks: {}
+history: []

@@ -1,0 +1,23 @@
+data_path: data/raw/sales.parquet
+target: sales
+task_type: forecasting
+target_code: null
+split:
+  strategy: time
+  test_days: 28
+  gap_days: 0
+  group_col: store_id
+  date_col: date
+  cv:
+    n_folds: 3
+    window: expanding
+    valid_days: 28
+    train_days: null
+  duplicates: keep_together
+  missing_target: drop
+  seed: 42
+reasoning:
+  strategy: 'Forecasting: the test set is the latest period, one forecast horizon long, and CV uses rolling backtest
+    folds of the same length. No gap is needed, because feature engineering shifts lags by at least the horizon
+    (28 days). With 730 days of history, 3 folds of 28 days leave about 618 days of training data in the first fold.'
+

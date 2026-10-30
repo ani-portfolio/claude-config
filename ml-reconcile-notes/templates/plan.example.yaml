@@ -1,0 +1,30 @@
+# Example plan for: reconcile.py apply <this file>
+# Every item is a change the user approved. Check it first with --dry-run.
+
+# Text changes in notebook cells. "old" must appear exactly once in the cell (use reconcile.py find to locate it).
+# A changed decision cell makes that notebook, and every later one, run again.
+edits:
+  - notebook: notebooks/03_problem_framing.ipynb
+    cell: cell-014
+    old: "than the logistic regression baseline"
+    new: "than the current 30 day rule"
+    why: Logistic regression is built in model training, not as a baseline. The reference baseline is the 30 day rule.
+
+# A decision that no longer holds stays in the log, marked as replaced, and the new decision is added after it.
+supersede_decisions:
+  - decision: "Time split with a 71 day test period, a 60 day gap, and two rolling backtest folds."
+    superseded_by: "Time split with a 71 day test period, a 60 day gap, and two rolling backtest folds of 28 days."
+    reason: The validation windows were shortened so the first fold keeps enough training data.
+    stage: split
+
+# Open questions that later work has answered.
+resolve_questions:
+  - {id: Q4, answer: "Expected. Orders are aggregated per customer before any join."}
+
+# Assumptions that no longer hold, or were confirmed. They move to retired_assumptions with the reason.
+# Also remove them from the decision cell that lists them (an edit above), or the next run adds them back.
+retire_assumptions:
+  - {assumption: "Scoring dates are Mondays and every active customer is scored each week.", reason: "Confirmed by the data."}
+
+# Assumptions reworded in place. Reword them in their decision cell too.
+replace_assumptions: []

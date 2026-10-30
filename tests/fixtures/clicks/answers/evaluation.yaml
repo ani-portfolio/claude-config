@@ -1,0 +1,25 @@
+models: all
+slices:
+  categorical:
+  - c1
+  numeric_bins:
+    i1: 4
+    x: 4
+  time: null
+  new_entity: null
+  missing:
+  - i1
+  protected: []
+  min_rows: 100
+  min_positives: 30
+bootstrap:
+  n: 200
+  cluster: null
+  seed: 0
+reasoning: {}
+risks: []
+assumptions: []
+open_questions: []
+decisions: []
+resolved_questions: []
+

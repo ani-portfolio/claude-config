@@ -1,0 +1,18 @@
+data_path: data/raw/customers.csv
+target: lapsed_60d
+task_type: binary_classification
+target_code: null
+split:
+  strategy: time
+  test_days: 71
+  gap_days: 60
+  group_col: customer_id
+  date_col: scoring_date
+  cv:
+    n_folds: 2
+    window: expanding
+    valid_days: 28
+    train_days: null
+  duplicates: keep_together
+  missing_target: drop
+  seed: 42

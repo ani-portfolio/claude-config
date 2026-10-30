@@ -1,0 +1,27 @@
+models:
+- name: ridge
+  type: ridge
+  params: {}
+  class_weight: null
+  tuning:
+    n_trials: 6
+    timeout_minutes: 10
+  reason: 'The simple model first: it shows whether the features carry signal, and it is easy to explain.'
+- name: lightgbm
+  type: lightgbm
+  params: {}
+  class_weight: null
+  tuning:
+    n_trials: 6
+    timeout_minutes: 10
+  reason: Gradient boosting usually gives the best results on tables like this one.
+training:
+  seed: 42
+  selection: best_mean
+reasoning: {}
+risks: []
+assumptions: []
+open_questions: []
+decisions: []
+resolved_questions: []
+

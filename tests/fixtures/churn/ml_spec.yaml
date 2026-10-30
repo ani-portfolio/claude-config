@@ -1,0 +1,538 @@
+spec_version: 1
+project:
+  name: regress-churn
+  description: Predict customers who will stop ordering
+  owner: null
+  python: 3.11.17
+  created: '2026-10-08T14:48:35'
+  updated: '2026-10-15T11:41:47'
+paths:
+  data_raw: data/raw
+  data_processed: data/processed
+  notebooks: notebooks
+  src: src
+  models: models
+  docs: docs
+business:
+  status: confirmed
+  business_goal: Reduce revenue lost to customers who stop ordering.
+  business_kpi: Retained revenue from contacted customers
+  decision_supported: The retention team sends an offer to the customers most likely
+    to lapse each week.
+  users: Retention marketing team
+  capacity: 500 offers a week
+  current_approach: A rule flags customers with no order in the last 30 days.
+  outcome: Customers who are about to stop ordering.
+  output_use: ranked_list
+  v1_bar_intent: Finds more of the customers who lapse than the 30 day rule, at the
+    same 500 offers a week.
+  ml_needed: 'yes'
+  ml_needed_reason: The 30 day rule misses customers whose ordering slows down gradually,
+    and offers have a real cost.
+  constraints:
+    latency: Not a concern, weekly batch scoring
+    interpretability: Top reasons for each score should be available to the team
+    fairness: No protected attributes as features
+    data_access: Order and account tables only
+    other: []
+  out_of_scope:
+  - Choosing which offer to send
+  risks:
+  - problem: The first goal given was "build a churn model", which is the model, not
+      a business outcome.
+    resolution: Restated as reducing revenue lost to lapsed customers, measured by
+      retained revenue.
+  - problem: Offers may stop customers from lapsing, which changes future labels.
+    resolution: Open question for the evaluation stage, about keeping a holdout group.
+discovery:
+  run_at: '2026-10-08T14:51:35'
+  notebook: notebooks/02_data_discovery.ipynb
+  dictionary: docs/data_dictionary.yaml
+  main_source: customers
+  sources:
+  - name: customers
+    path: data/raw/customers.csv
+    description: One row per customer per weekly scoring date.
+    rows: 20000
+    columns: 10
+    duplicate_rows: 0
+    grain:
+      type: unclear
+      columns: []
+    entity_id_candidates:
+    - column: customer_id
+      distinct: 3972
+      rows_per_value: 5.04
+    date_columns:
+    - column: scoring_date
+      min: '2025-01-06'
+      max: '2025-12-29'
+      span_days: 357
+      missing_pct: 0.0
+    main_date: scoring_date
+    history_days: 357
+    days_since_last_date: 283
+    months_with_no_rows: []
+    thin_months: []
+    issues:
+    - severity: High
+      finding: ID column is not unique
+      count: 1
+    - severity: Medium
+      finding: Columns that look like personal data
+      count: 1
+    - severity: Medium
+      finding: Dates stored as text
+      count: 1
+    - severity: Low
+      finding: Highly skewed (absolute skew above 2)
+      count: 2
+    - severity: Low
+      finding: Highly correlated numeric pairs (|Spearman| ≥ 0.9)
+      count: 1
+    - severity: Low
+      finding: No column or pair of columns uniquely identifies every row.
+      count: 0
+    issue_counts:
+      High: 1
+      Medium: 2
+      Low: 3
+  - name: orders
+    path: data/raw/orders.parquet
+    description: null
+    rows: 27469
+    columns: 8
+    duplicate_rows: 0
+    grain:
+      type: single
+      columns:
+      - order_id
+      other_unique_columns: []
+    entity_id_candidates:
+    - column: customer_id
+      distinct: 4266
+      rows_per_value: 6.44
+    - column: order_id
+      distinct: 27469
+      rows_per_value: 1.0
+    date_columns:
+    - column: order_ts
+      min: '2025-01-01'
+      max: '2025-12-26'
+      span_days: 359
+      missing_pct: 0.0
+    - column: refund_dt
+      min: '2025-06-01'
+      max: '2025-06-01'
+      span_days: 0
+      missing_pct: 95.12
+    main_date: order_ts
+    history_days: 359
+    days_since_last_date: 286
+    months_with_no_rows:
+    - 2025-04
+    thin_months: []
+    issues:
+    - severity: High
+      finding: ID column is not unique
+      count: 1
+    - severity: High
+      finding: Mostly missing (50% or more)
+      count: 1
+    - severity: Medium
+      finding: Dates stored as text
+      count: 2
+    - severity: Medium
+      finding: Empty weeks inside the date range
+      count: 1
+    issue_counts:
+      High: 2
+      Medium: 2
+  joins:
+  - left: customers
+    right: orders
+    keys:
+    - customer_id
+    relationship: many to many
+    left_match_pct: 99.8
+    right_match_pct: 92.8
+    rows_per_matched_left_row: 6.43
+    left_rows_per_key_max: 17
+    right_rows_per_key_max: 16
+    notes:
+    - a join multiplies rows, so aggregate one side to the key first
+  dictionary_summary:
+    columns: 18
+    needs_review: 3
+    unclear_meaning: []
+    timing_unknown: []
+    possibly_after_outcome:
+    - orders.refund_dt
+    candidate_targets:
+    - customers.refund_after_cancel
+    - customers.lapsed_60d
+    personal_data:
+    - customers.email
+  framing_hints:
+    candidate_targets:
+    - column: lapsed_60d
+      suggested_type: categorical
+      unique: 2
+      missing_pct: 0.0
+      reasons:
+      - name suggests an outcome
+      - binary
+      - last column
+      smaller_class_share: 0.1529
+    - column: refund_after_cancel
+      suggested_type: continuous
+      unique: 2178
+      missing_pct: 0.0
+      reasons:
+      - name suggests an outcome
+      - continuous numeric
+    - column: spend_90d
+      suggested_type: continuous
+      unique: 17304
+      missing_pct: 0.0
+      reasons:
+      - name suggests a measure that is often predicted
+      - continuous numeric
+    - column: plan
+      suggested_type: categorical
+      unique: 3
+      missing_pct: 0.0
+      reasons:
+      - 3 classes
+    - column: region
+      suggested_type: categorical
+      unique: 5
+      missing_pct: 0.0
+      reasons:
+      - 5 classes
+    grain:
+      type: unclear
+      columns: []
+    entity_id_candidates:
+    - column: customer_id
+      distinct: 3972
+      rows_per_value: 5.04
+    date_columns:
+    - column: scoring_date
+      min: '2025-01-06'
+      max: '2025-12-29'
+      span_days: 357
+      missing_pct: 0.0
+    main_date: scoring_date
+    history_days: 357
+    post_outcome_suspects:
+    - refund_after_cancel
+framing:
+  status: confirmed
+  task_type: binary_classification
+  target:
+    name: lapsed_60d
+    definition: Positive when the customer places zero orders in the 60 days after
+      the scoring date.
+    positive_class: lapsed (1)
+    outcome_window: 60 days after the scoring date
+    exists_in_data: true
+    construction: null
+    label_delay: 60 days
+  unit_of_prediction: One active customer on each weekly scoring date
+  entity_id_cols:
+  - customer_id
+  population: Customers with at least one order in the 180 days before the scoring
+    date
+  prediction_time:
+    description: Every Monday morning, using data up to the end of Sunday
+    column: scoring_date
+    feature_cutoff: End of the day before the scoring date
+    cadence: weekly batch
+    horizon: null
+  success:
+    primary_metric: Recall at the top 500 customers per week
+    secondary_metrics:
+    - PR AUC
+    - calibration
+    v1_bar: Recall at 500 at least 20% higher than the current 30 day rule
+    guardrails:
+    - Offer volume stays within the weekly budget
+  risks:
+  - problem: refund_after_cancel is almost perfectly associated with the target.
+    resolution: Excluded, because it is recorded after the outcome.
+data:
+  sources:
+  - name: customers
+    path: data/raw/customers.csv
+    rows: 20000
+    columns: 10
+    description: One row per customer per weekly scoring date.
+  - name: orders
+    path: data/raw/orders.parquet
+    rows: 27469
+    columns: 8
+    description: null
+  date_col: scoring_date
+  id_cols: []
+  excluded_cols:
+  - column: refund_after_cancel
+    reason: recorded after the outcome
+  - column: email
+    reason: personal data
+eda:
+  mode: targeted
+  run_at: '2026-10-09T13:08:15'
+  source: data/raw/customers.csv
+  report: notebooks/04_eda_customers.ipynb
+  rows: 20000
+  columns: 10
+  sampled: false
+  grain:
+    type: unclear
+    columns: []
+  duplicate_rows: 0
+  primary_date:
+    column: scoring_date
+    min: '2025-01-06'
+    max: '2025-12-29'
+  columns_by_role:
+    identifier:
+    - customer_id
+    datetime_as_text:
+    - scoring_date
+    numeric:
+    - orders_90d
+    - spend_90d
+    - days_since_last_order
+    - refund_after_cancel
+    categorical:
+    - plan
+    - region
+    personal_data:
+    - email
+  target:
+    column: lapsed_60d
+    type: categorical
+    task: classification
+    missing_pct: 0.0
+    unique: 2
+    class_balance:
+      '0': 0.8471
+      '1': 0.1529
+    imbalance_ratio: 5.54
+  top_target_associations:
+  - feature: refund_after_cancel
+    measure: Spearman
+    association: 0.9954
+    mutual_information: 0.4276
+  - feature: days_since_last_order
+    measure: Spearman
+    association: 0.3051
+    mutual_information: 0.0502
+  - feature: orders_90d
+    measure: Spearman
+    association: -0.1482
+    mutual_information: 0.0118
+  - feature: spend_90d
+    measure: Spearman
+    association: -0.0806
+    mutual_information: 0.0052
+  - feature: plan
+    measure: Cramér's V
+    association: 0.0
+    mutual_information: 0.0
+  - feature: region
+    measure: Cramér's V
+    association: 0.0
+    mutual_information: 0.0001
+  leakage_suspects:
+  - column: refund_after_cancel
+    reasons:
+    - association with the target is 0.995
+    - the name suggests it may be recorded after the outcome or derived from the target
+  suggested_exclusions:
+  - column: customer_id
+    reason: identifier
+  - column: email
+    reason: possible personal data
+  - column: refund_after_cancel
+    reason: 'possible leakage: association with the target is 0.995; the name suggests
+      it may be recorded after the outcome or derived from the target'
+  issues:
+  - severity: High
+    area: Keys and duplicates
+    finding: ID column is not unique
+    action: Check whether the data should have one row per ID, and look for a many
+      to many join.
+    columns:
+    - customer_id
+  - severity: High
+    area: Target
+    finding: Possible leakage
+    action: Confirm the feature is available at prediction time, and drop it if it
+      is not.
+    columns:
+    - refund_after_cancel
+  - severity: Medium
+    area: Overview
+    finding: Columns that look like personal data
+    action: Confirm these columns are needed, and mask or drop them before sharing
+      the data.
+    columns:
+    - email
+  - severity: Medium
+    area: Data types
+    finding: Dates stored as text
+    action: Convert with pd.to_datetime.
+    columns:
+    - scoring_date
+  - severity: Low
+    area: Numeric columns
+    finding: Highly skewed (absolute skew above 2)
+    action: Consider a log or rank transform for linear models.
+    columns:
+    - spend_90d
+    - refund_after_cancel
+  - severity: Low
+    area: Keys and duplicates
+    finding: No column or pair of columns uniquely identifies every row.
+    action: Confirm the intended grain of the data with its owner.
+  missing_groups: []
+  framing_checks:
+  - check: Target column exists
+    status: pass
+    detail: '`lapsed_60d` is in the data.'
+  - check: Target type matches the task type
+    status: pass
+    detail: '`lapsed_60d` is categorical, as binary classification needs.'
+  - check: Rows per `customer_id`
+    status: warn
+    detail: 3,972 distinct values over 20,000 rows, about 5.0 rows each. Split by
+      `customer_id` or by time so the same entity is not in both train and test.
+  - check: Grain matches the unit of prediction
+    status: warn
+    detail: 'Framing: One active customer on each weekly scoring date. But 1,836 rows
+      share their `customer_id` + `scoring_date` with another row. Decide whether
+      to aggregate them or whether the unit of prediction is finer than the framing
+      says.'
+  - check: Prediction time column exists
+    status: pass
+    detail: '`scoring_date` runs from 2025-01-06 to 2025-12-29.'
+  - check: Excluded columns
+    status: pass
+    detail: 2 of 2 excluded columns are in the data and will be kept out of features.
+  - check: Leakage suspects handled
+    status: pass
+    detail: No leakage suspects outside the excluded columns.
+  framing_hints:
+    candidate_targets:
+    - column: lapsed_60d
+      suggested_type: categorical
+      unique: 2
+      missing_pct: 0.0
+      reasons:
+      - name suggests an outcome
+      - binary
+      - last column
+      smaller_class_share: 0.1529
+    - column: refund_after_cancel
+      suggested_type: continuous
+      unique: 2178
+      missing_pct: 0.0
+      reasons:
+      - name suggests an outcome
+      - continuous numeric
+    - column: spend_90d
+      suggested_type: continuous
+      unique: 17304
+      missing_pct: 0.0
+      reasons:
+      - name suggests a measure that is often predicted
+      - continuous numeric
+    - column: plan
+      suggested_type: categorical
+      unique: 3
+      missing_pct: 0.0
+      reasons:
+      - 3 classes
+    - column: region
+      suggested_type: categorical
+      unique: 5
+      missing_pct: 0.0
+      reasons:
+      - 5 classes
+    grain:
+      type: unclear
+      columns: []
+    entity_id_candidates:
+    - column: customer_id
+      distinct: 3972
+      rows_per_value: 5.04
+    date_columns:
+    - column: scoring_date
+      min: '2025-01-06'
+      max: '2025-12-29'
+      span_days: 357
+      missing_pct: 0.0
+    main_date: scoring_date
+    history_days: 357
+    post_outcome_suspects:
+    - refund_after_cancel
+assumptions:
+- The weekly offer capacity stays at about 500.
+- The customer base in the test period is like the one the model will score next.
+- The sample has about 380 customers per week, so k is 50 instead of the 500 used
+  in production.
+open_questions:
+- id: Q1
+  question: Can a random holdout group be kept out of the offers, so future labels
+    are not biased?
+  stage: evaluation
+  raised_by: ml-business-framing
+  status: open
+- id: Q2
+  question: 'What do these orders columns mean: `c14`? (see notebooks/02_data_discovery.ipynb)'
+  stage: framing
+  raised_by: ml-data-discovery
+  status: resolved
+  answer: Answered in the data dictionary.
+- id: Q3
+  question: 'When are these orders columns filled in, relative to the outcome: `refund_dt`?
+    If after, they must be excluded from the features.'
+  stage: framing
+  raised_by: ml-data-discovery
+  status: open
+- id: Q4
+  question: 'The join of customers and orders on customer_id is many to many: a join
+    multiplies rows, so aggregate one side to the key first. Is that expected?'
+  stage: framing
+  raised_by: ml-data-discovery
+  status: resolved
+  answer: Expected. Orders are aggregated per customer before any join; the model
+    table has one row per customer and week.
+- id: Q5
+  question: 1,836 rows share the same customer_id + scoring_date. Should they be aggregated,
+    or is the unit of prediction finer than the framing says?
+  stage: framing
+  raised_by: ml-eda-report
+  status: open
+decisions:
+- date: '2026-10-08'
+  stage: business
+  decision: V1 is measured against the 30 day rule at the same weekly volume.
+  reason: It is the current approach, and the team understands it.
+- date: '2026-10-08'
+  stage: framing
+  decision: The outcome window is 60 days.
+  reason: It matches how the retention team defines a lapsed customer.
+retired_assumptions:
+- assumption: Scoring dates are Mondays and every active customer is scored each week.
+  reason: 'Confirmed by the data: the scoring dates are weekly Mondays.'
+  retired_on: '2026-10-09'
+- assumption: orders_90d and spend_90d are computed from orders before the scoring
+    date only.
+  reason: Confirmed with the data owner.
+  retired_on: '2026-10-09'
+notebooks: {}
+history: []

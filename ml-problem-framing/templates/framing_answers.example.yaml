@@ -1,0 +1,60 @@
+# Example answers file for: make_notebook.py <this file>
+# It builds notebooks/03_problem_framing.ipynb. Use exactly these keys, and null for anything not known yet.
+# Business fields (goal, decision, current approach, constraints) live in 01_business_framing, not here.
+status: confirmed
+framing:
+  task_type: binary_classification
+  target:
+    name: lapsed_60d
+    definition: Positive when the customer places zero orders in the 60 days after the scoring date.
+    positive_class: lapsed (1)
+    outcome_window: 60 days after the scoring date
+    exists_in_data: true
+    construction: null
+    label_delay: 60 days
+  unit_of_prediction: One active customer on each weekly scoring date
+  entity_id_cols: [customer_id]
+  population: Customers with at least one order in the 180 days before the scoring date
+  prediction_time:
+    description: Every Monday morning, using data up to the end of Sunday
+    column: scoring_date
+    feature_cutoff: End of the day before the scoring date
+    cadence: weekly batch
+    horizon: null
+  success:
+    primary_metric: Recall at the top 500 customers per week
+    secondary_metrics: [PR AUC, calibration]
+    v1_bar: Recall at 500 at least 20% higher than the current 30 day rule
+    guardrails: [Offer volume stays within the weekly budget]
+    # The V1 bar as checks a script can apply (see the Success Criteria hint in the notebook). on: cv is judged in
+    # model training, on: test in offline evaluation. Quote the key as "on": unquoted, YAML reads it as true.
+    v1_criteria:
+      - {id: beats_rule_cv, kind: pct_over_reference, pct: 20, "on": cv}
+      - {id: beats_rule_test, kind: pct_over_reference, pct: 20, "on": test}
+      - {id: offers_in_budget, kind: manual, text: Offer volume stays within the weekly budget}
+data:
+  date_col: scoring_date
+  id_cols: []
+  excluded_cols:
+    - {column: refund_after_cancel, reason: recorded after the outcome}
+    - {column: email, reason: personal data}
+# One short paragraph per section, in plain sentences: why the answer is what it is. Shown above each decision cell.
+reasoning:
+  target: The lapsed_60d column matches the business outcome, and its 60 day window is stated in the spec.
+  unit: The data has one row per customer per weekly scoring date, which matches the weekly offer decision.
+  prediction_time: Offers go out on Monday, so features may use data up to the end of Sunday.
+  success: The team contacts 500 customers a week, so recall at 500 measures what matters.
+  exclusions: The refund column is filled in after a cancellation, so it would leak the outcome.
+checks:
+  data_path: data/raw/customers.csv   # the file the checks run on (default: the main source from discovery)
+  test_days: 90                       # length of the test period to hold out
+risks:
+  - problem: refund_after_cancel is almost perfectly associated with the target.
+    resolution: Excluded, because it is recorded after the outcome.
+assumptions:
+  - Scoring dates are Mondays and every active customer is scored each week.
+open_questions: []
+decisions:
+  - decision: The outcome window is 60 days.
+    reason: It matches how the retention team defines a lapsed customer.
+resolved_questions: []   # for example [{id: Q2, answer: "refund_dt is filled in after the outcome; excluded."}]

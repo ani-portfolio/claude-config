@@ -1,0 +1,33 @@
+# Example answers file for: make_notebook.py <this file>
+# It builds notebooks/07_baseline.ipynb. Start from the output of make_notebook.py --suggest.
+metrics:
+  primary:
+    key: recall_at_k      # from framing.success.primary_metric
+    k: 50                 # rows per group; use k_share (for example 0.13) when the sample is smaller than production
+    k_per: scoring_date   # apply k within each scoring date
+  secondary: [pr_auc, roc_auc, log_loss]
+baselines:
+  - name: current_rule
+    type: rule
+    params: {expression: "days_since_last_order > 30"}
+    reason: Today's approach, a rule that flags customers with no order in the last 30 days.
+  - name: base_rate
+    type: prior
+    params: {}
+    reason: The floor every model must clear.
+  - name: best_feature_days_since_last_order
+    type: column
+    params: {column: days_since_last_order, direction: higher}
+    reason: Sorting by recency alone, the strongest single feature.
+reference: current_rule   # the baseline models are measured against; null uses the best baseline
+reasoning:
+  metrics: The team contacts a fixed number of customers each week, so recall within each week's top list is what matters.
+  baselines: The 30 day rule is today's approach and the V1 bar is stated against it. The base rate is the floor. Sorting by recency shows whether a simpler change to the rule would already help.
+risks: []
+assumptions:
+  - The sample has about 380 customers per week, so k is 50 instead of the 500 used in production.
+open_questions: []
+decisions:
+  - decision: The current 30 day rule is the reference.
+    reason: The V1 bar is stated against it.
+resolved_questions: []

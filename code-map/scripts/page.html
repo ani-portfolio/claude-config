@@ -1,0 +1,466 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Code map</title>
+<style>
+  :root {
+    --bg: #fbfbfa; --panel: #ffffff; --ink: #1d1d1f; --muted: #6b6b70; --line: #d9d9de;
+    --group: #e8eef9; --group-edge: #4a6fb5; --shared: #f3efe6; --shared-edge: #a07a2c;
+    --asset: #e6f4ec; --asset-edge: #2f8a57; --ghost: #f1f1f3; --edge: #9a9aa3;
+    --write: #c2410c; --read: #2563eb; --accent: #4a6fb5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #17171a; --panel: #1f1f23; --ink: #ececf0; --muted: #9a9aa3; --line: #34343a;
+      --group: #22304a; --group-edge: #7d9ee0; --shared: #3a3122; --shared-edge: #d6ad5c;
+      --asset: #1f3a2b; --asset-edge: #5cc28a; --ghost: #2a2a2f; --edge: #6e6e78;
+      --write: #fb923c; --read: #60a5fa; --accent: #7d9ee0;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 -apple-system, BlinkMacSystemFont,
+         "Segoe UI", sans-serif; height: 100vh; display: flex; flex-direction: column; }
+  header { display: flex; align-items: center; gap: 16px; padding: 10px 16px; border-bottom: 1px solid var(--line);
+           background: var(--panel); flex-wrap: wrap; }
+  header h1 { font-size: 15px; margin: 0; font-weight: 600; }
+  .tabs button, .crumbs button, .tourlist button { font: inherit; color: inherit; background: none; border: 0;
+           cursor: pointer; padding: 4px 8px; border-radius: 6px; }
+  .tabs button.on { background: var(--group); color: var(--ink); font-weight: 600; }
+  #warn { margin-left: auto; color: var(--muted); cursor: pointer; }
+  #warnings { display: none; padding: 8px 16px; border-bottom: 1px solid var(--line); background: var(--panel);
+              color: var(--muted); font-size: 13px; max-height: 30vh; overflow: auto; }
+  #warnings.open { display: block; }
+  main { flex: 1; display: flex; min-height: 0; }
+  .view { display: none; flex: 1; min-width: 0; }
+  .view.on { display: flex; }
+  #mapview { flex-direction: column; }
+  .crumbs { padding: 6px 12px; color: var(--muted); border-bottom: 1px solid var(--line); }
+  .crumbs button { color: var(--accent); }
+  .mapbody { flex: 1; display: flex; min-height: 0; }
+  #cy { flex: 1; min-width: 0; }
+  aside { width: 340px; max-width: 45%; border-left: 1px solid var(--line); background: var(--panel); overflow: auto;
+          padding: 14px 16px; }
+  aside h2 { font-size: 14px; margin: 0 0 4px; word-break: break-all; }
+  aside h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 16px 0 6px; }
+  aside ul { margin: 0; padding-left: 18px; }
+  aside li { margin: 2px 0; word-break: break-all; }
+  .muted { color: var(--muted); }
+  .open { display: inline-block; margin: 8px 0; color: var(--accent); font-weight: 600; text-decoration: none; }
+  a.file { color: var(--accent); text-decoration: none; cursor: pointer; }
+  .chip { display: inline-block; font-size: 11px; padding: 0 6px; border-radius: 9px; background: var(--group);
+          color: var(--ink); margin-left: 4px; }
+  .chip.shared { background: var(--shared); }
+  .names { color: var(--muted); font-size: 12px; }
+  #tip { position: fixed; pointer-events: none; background: var(--panel); border: 1px solid var(--line);
+         border-radius: 6px; padding: 6px 8px; font-size: 12px; max-width: 420px; display: none; z-index: 9;
+         box-shadow: 0 2px 8px rgba(0,0,0,.15); white-space: pre-wrap; }
+  #tourview { min-height: 0; }
+  .tourlist { width: 300px; max-width: 40%; border-right: 1px solid var(--line); overflow: auto; padding: 10px; }
+  .tourlist button { display: block; width: 100%; text-align: left; word-break: break-all; }
+  .tourlist button.on { background: var(--group); }
+  .steps { flex: 1; overflow: auto; padding: 16px 24px; }
+  .step { display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .step .n { color: var(--muted); width: 24px; text-align: right; flex: none; }
+  .mapbody { position: relative; }
+  .legend { position: absolute; left: 12px; bottom: 12px; background: var(--panel); border: 1px solid var(--line);
+            border-radius: 8px; padding: 8px 10px; font-size: 12px; max-width: 290px; z-index: 5;
+            box-shadow: 0 2px 8px rgba(0,0,0,.12); }
+  .legend summary { cursor: pointer; font-weight: 600; }
+  .legend .row { display: flex; align-items: center; gap: 8px; margin: 3px 0; }
+  .legend .sw { width: 22px; height: 12px; border-radius: 3px; border: 1.5px solid; flex: none; }
+  .legend .ln { width: 22px; height: 0; border-top: 2px solid; flex: none; }
+  .legend .hint { color: var(--muted); margin-top: 6px; }
+  @media (max-width: 700px) { aside { display: none; } .tourlist { width: 40%; } }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="title">Code map</h1>
+  <nav class="tabs"><button data-tab="mapview" class="on">Map</button><button data-tab="tourview">Tour</button></nav>
+  <span id="warn"></span>
+</header>
+<div id="warnings"></div>
+<main>
+  <section id="mapview" class="view on">
+    <div class="crumbs" id="crumbs"></div>
+    <div class="mapbody">
+      <div id="cy"></div>
+      <aside id="side"></aside>
+      <details class="legend" id="legend" open></details>
+    </div>
+  </section>
+  <section id="tourview" class="view">
+    <div class="tourlist" id="tourlist"></div>
+    <div class="steps" id="steps"></div>
+  </section>
+</main>
+<div id="tip"></div>
+<script type="application/json" id="model">__MODEL__</script>
+<script>/*__CYTOSCAPE__*/</script>
+<script>
+const M = JSON.parse(document.getElementById("model").textContent);
+const file = Object.fromEntries(M.files.map(f => [f.id, f]));
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+const base = id => id.split("/").pop();
+const vscode = id => "vscode://file" + encodeURI(file[id].path) + ":1";
+const fileLink = id => `<a class="file" data-file="${esc(id)}">${esc(id)}</a>`;
+const repo = M.root.split("/").pop();
+document.getElementById("title").textContent = "Code map: " + repo;
+document.title = "Code map: " + repo;
+
+// Warnings
+const warn = document.getElementById("warn"), warnings = document.getElementById("warnings");
+if (M.warnings.length) {
+  warn.textContent = `${M.warnings.length} warning${M.warnings.length > 1 ? "s" : ""}`;
+  warnings.innerHTML = "<ul>" + M.warnings.map(w => `<li>${esc(w)}</li>`).join("") + "</ul>";
+  warn.onclick = () => warnings.classList.toggle("open");
+}
+
+// Tabs
+document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => {
+  document.querySelectorAll(".tabs button").forEach(x => x.classList.toggle("on", x === b));
+  document.querySelectorAll(".view").forEach(v => v.classList.toggle("on", v.id === b.dataset.tab));
+  if (b.dataset.tab === "mapview") cy.resize();
+});
+
+// Graph
+const style = () => [
+  {selector: "node", style: {"label": "data(label)", "text-wrap": "wrap", "text-max-width": 230, "font-size": 12,
+    "text-valign": "center", "color": css("--ink"), "shape": "round-rectangle", "background-color": css("--group"),
+    "border-width": 1.5, "border-color": css("--group-edge")}},
+  {selector: "node:childless", style: {"width": "label", "height": "label", "padding": 10}},
+  {selector: "node:parent", style: {"text-valign": "top", "text-margin-y": -6, "padding": 12}},
+  {selector: "node.job", style: {"background-color": css("--bg"), "font-size": 11, "padding": 5}},
+  {selector: "node.platform", style: {"background-color": css("--asset"), "background-opacity": 0.3,
+    "border-style": "dashed", "border-color": css("--asset-edge"), "font-size": 11, "color": css("--muted")}},
+  {selector: "node.shared", style: {"background-color": css("--shared"), "border-color": css("--shared-edge")}},
+  {selector: "node.asset", style: {"shape": "barrel", "background-color": css("--asset"),
+    "border-color": css("--asset-edge")}},
+  {selector: "node.ghost", style: {"background-color": css("--ghost"), "border-style": "dashed",
+    "border-color": css("--edge"), "color": css("--muted")}},
+  {selector: "node:selected", style: {"border-width": 3, "border-color": css("--accent")}},
+  {selector: "edge", style: {"width": 1.5, "line-color": css("--edge"), "target-arrow-color": css("--edge"),
+    "target-arrow-shape": "triangle", "arrow-scale": 0.9, "curve-style": "taxi", "taxi-direction": "horizontal",
+    "taxi-turn": "50%", "taxi-turn-min-distance": 12}},
+  {selector: "edge.vertical", style: {"taxi-direction": "vertical"}},
+  {selector: "edge.side", style: {"source-endpoint": "50% 0%", "target-endpoint": "-50% 0%"}},
+  {selector: "edge[count > 1]", style: {"label": "data(count)", "font-size": 10, "color": css("--muted"),
+    "text-background-color": css("--bg"), "text-background-opacity": 1}},
+  {selector: "edge.write", style: {"line-color": css("--write"), "target-arrow-color": css("--write"), "width": 2}},
+  {selector: "edge.read", style: {"line-color": css("--read"), "target-arrow-color": css("--read"), "width": 2}},
+  {selector: "edge.touch", style: {"line-style": "dashed", "target-arrow-shape": "none"}},
+  {selector: "node.empty", style: {"border-style": "dashed", "background-color": css("--ghost"),
+    "border-color": css("--edge"), "color": css("--muted")}},
+  {selector: "edge.back", style: {"curve-style": "unbundled-bezier", "control-point-distances": [-90],
+    "control-point-weights": [0.5], "line-style": "dashed"}},
+  {selector: ".faded", style: {"opacity": 0.12}},
+];
+const cy = cytoscape({container: document.getElementById("cy"), style: style(), wheelSensitivity: 0.3,
+  minZoom: 0.2, maxZoom: 3});
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => cy.style(style()));
+
+const fileGroup = id => file[id].group;
+const groupKind = Object.fromEntries(M.groups.map(g => [g.id, g.kind]));
+const assetOf = Object.fromEntries(M.assets.map(a => [a.id, a]));
+const assetEdge = (e, from) => {
+  const asset = "asset:" + e.asset;
+  return e.dir === "read" ? {source: asset, target: from} : {source: from, target: asset};
+};
+
+const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+const jobLabel = id => {
+  const parts = id.replace(/\.py$/, "").split("/");
+  return "▶ " + (parts.at(-1) === "__init__" ? parts.at(-2) : parts.at(-1));
+};
+
+// Each group with its number of files; its entry points sit inside it as chips.
+function groupNodes() {
+  const els = [];
+  for (const g of M.groups) {
+    const label = `${g.id} · ${plural(M.files.filter(f => f.group === g.id).length, "file")}`;
+    els.push({data: {id: "g:" + g.id, group: g.id, col: g.col, label}, classes: g.kind + (g.empty ? " empty" : "")});
+    for (const j of g.jobs) els.push({data: {id: "j:" + j, parent: "g:" + g.id, file: j, col: g.col,
+      label: jobLabel(j)}, classes: "job"});
+  }
+  return els;
+}
+
+// Store names, each inside a box for the platform it lives on. On the top level (band) each platform is one lane
+// across the map above the pipelines; in a drill-in there is one box per platform and column.
+function assetNodes(ids, colOf, band = false) {
+  const els = [], boxes = new Set();
+  for (const id of ids) {
+    const a = assetOf[id], col = colOf(id);
+    const parent = a.platform ? (band ? `p:${a.platform}` : `p:${a.platform}:${col}`) : undefined;
+    if (parent && !boxes.has(parent)) {
+      boxes.add(parent);
+      els.push({data: {id: parent, label: a.platform, col: band ? null : col, band}, classes: "platform"});
+    }
+    els.push({data: {id: "asset:" + id, label: `${id}\n${a.value}`, asset: id, col, parent, band: !parent && band,
+      lane: band ? a.platform || "" : undefined}, classes: "asset"});
+  }
+  return els;
+}
+const LANES = ["Feature store", "Model registry", "Serving", "Jobs"];  // top to bottom above the pipeline row
+
+function topView() {
+  const els = groupNodes();
+  const agg = {};
+  for (const e of M.imports) {
+    const a = fileGroup(e.from), b = fileGroup(e.to);
+    if (a === b) continue;
+    (agg[a + ">" + b] ??= {source: "g:" + a, target: "g:" + b, list: []}).list.push(e);
+  }
+  for (const [k, v] of Object.entries(agg)) {
+    els.push({data: {id: "i:" + k, source: v.source, target: v.target, count: v.list.length,
+      tip: v.list.map(e => `${e.from} → ${base(e.to)}${e.names.length ? "  (" + e.names.join(", ") + ")" : ""}`)}});
+  }
+  const used = new Set();
+  const flows = {};
+  for (const e of M.asset_edges) {
+    used.add(e.asset);
+    const {source, target} = assetEdge(e, "g:" + e.group);
+    (flows[`${e.group}>${e.asset}>${e.dir}`] ??= {source, target, dir: e.dir, list: []}).list.push(e);
+  }
+  els.push(...assetNodes(used, id => assetOf[id].col, true));
+  for (const [k, v] of Object.entries(flows)) {
+    els.push({data: {id: "a:" + k, source: v.source, target: v.target,
+      tip: [`${v.dir}`, ...v.list.map(e => `${e.file}:${e.line}`)]}, classes: v.dir});
+  }
+  draw(els, 240);
+  crumbs(null);
+  side(`<h2>${esc(repo)}</h2><p class="muted">${M.files.length} files in ${M.groups.length} groups${
+    M.ml ? `, ${used.size} store and registry names` : ""}.</p>
+    <p class="muted">Click a group to see its files. Hover over an arrow to see the names it carries.</p>`);
+}
+
+function groupView(g) {
+  const mine = M.files.filter(f => f.group === g).map(f => f.id);
+  const inside = new Set(mine), ghosts = new Set(), callers = new Set();
+  const els = [];
+  for (const e of M.imports) {
+    const a = inside.has(e.from), b = inside.has(e.to);
+    if (!a && !b) continue;
+    if (!a) { ghosts.add(e.from); callers.add(e.from); }
+    if (!b) ghosts.add(e.to);
+    els.push({data: {id: "e:" + e.from + ">" + e.to, source: "f:" + e.from, target: "f:" + e.to,
+      tip: e.names.length ? e.names : ["(module)"]}});
+  }
+  const right = Math.max(0, ...mine.map(id => file[id].col)) + 1;
+  for (const id of mine) els.push({data: {id: "f:" + id, file: id, label: base(id), col: file[id].col},
+    classes: groupKind[g]});
+  for (const id of ghosts) els.push({data: {id: "f:" + id, file: id, label: `${base(id)}\n${fileGroup(id)}`,
+    col: callers.has(id) ? -1 : right}, classes: "ghost"});
+  const assets = new Set(), written = new Set();
+  for (const e of M.asset_edges.filter(e => inside.has(e.file))) {
+    assets.add(e.asset);
+    if (e.dir === "write") written.add(e.asset);
+    els.push({data: {id: `a:${e.file}>${e.asset}>${e.dir}`, ...assetEdge(e, "f:" + e.file),
+      tip: [`${e.dir} at line ${e.line}`]}, classes: e.dir});
+  }
+  els.push(...assetNodes(assets, id => written.has(id) ? right : -1));
+  draw(els, 220);
+  crumbs(g);
+  const doc = M.groups.find(x => x.id === g).doc;
+  side(`<h2>${esc(g)}</h2>${doc ? `<p>${esc(doc)}</p>` : ""}
+    <p class="muted">${plural(mine.length, "file")}. Dashed boxes are files in other groups.</p>
+    <p class="muted">Click a file for its details, or double-click to open it in VS Code.</p>`);
+}
+
+// Columns come from the model (col). Boxes in a column are stacked by name, and a box with children (a pipeline
+// with its entry points, a platform with its store names) gets room for them. On the top level, store names sit
+// in lanes above the pipeline row, one per platform, each name at its own column; boxes without a column (the
+// shared group) sit in a row below. Every box takes its inputs on the left and gives its outputs on the right;
+// arrows to the shared row run vertically, and arrows that point left are loops, drawn curved and dashed.
+function draw(els, colWidth) {
+  const gap = 34, nodes = els.filter(e => !e.data.source), kids = {};
+  for (const n of nodes) if (n.data.parent) (kids[n.data.parent] ??= []).push(n);
+  const byLabel = (a, b) => a.data.label.localeCompare(b.data.label);
+  const labelHeight = n => n.data.label.split("\n").reduce((h, l) => h + 15 * Math.max(1, Math.ceil(l.length / 34)), 0);
+  const height = n => kids[n.data.id]
+    ? labelHeight(n) + 24 + kids[n.data.id].reduce((h, k) => h + height(k) + 8, -8)
+    : labelHeight(n) + 22;
+  const place = (n, x, top) => {
+    if (!kids[n.data.id]) { n.position = {x, y: top + height(n) / 2}; return; }
+    let y = top + labelHeight(n) + 12;
+    for (const k of kids[n.data.id].sort(byLabel)) { place(k, x, y); y += height(k) + 8; }
+  };
+  const stack = list => list.sort(byLabel).reduce((h, n) => h + height(n) + gap, -gap);
+  const columns = {};
+  for (const n of nodes.filter(n => n.data.col != null && !n.data.parent && !n.data.band)) {
+    (columns[n.data.col] ??= []).push(n);
+  }
+  let top = 0, bottom = 0;
+  const xs = [];
+  for (const [col, list] of Object.entries(columns)) {
+    let y = -stack(list) / 2;
+    top = Math.min(top, y);
+    for (const n of list) { place(n, col * colWidth, y); y += height(n) + gap; }
+    bottom = Math.max(bottom, y);
+    xs.push(col * colWidth);
+  }
+  const storeLanes = {};
+  for (const n of nodes.filter(n => n.data.lane !== undefined)) (storeLanes[n.data.lane] ??= []).push(n);
+  const order = lane => lane === "" ? -1 : LANES.length - LANES.indexOf(lane);  // names with no platform lowest
+  let laneBottom = top - 70;  // room above the row for the arrows
+  for (const lane of Object.keys(storeLanes).sort((a, b) => order(a) - order(b))) {
+    const cols = {};
+    for (const n of storeLanes[lane]) (cols[n.data.col] ??= []).push(n);
+    for (const [col, list] of Object.entries(cols)) {  // bottom aligned within the lane
+      let y = laneBottom - stack(list);
+      for (const n of list) { place(n, col * colWidth, y); y += height(n) + gap; }
+    }
+    laneBottom -= Math.max(...Object.values(cols).map(stack)) + (lane ? 15 + 24 : 0) + 30;
+  }
+  const below = nodes.filter(n => n.data.col == null && !n.data.parent && !n.data.band);
+  const mid = xs.length ? (Math.min(...xs) + Math.max(...xs)) / 2 : 0;
+  below.forEach((n, i) => place(n, mid + (i - (below.length - 1) / 2) * colWidth, bottom + 30));
+  cy.elements().remove();
+  const parents = new Set(Object.keys(kids));  // parents must exist before their children are added
+  cy.add([...nodes.filter(n => parents.has(n.data.id)), ...nodes.filter(n => !parents.has(n.data.id)),
+    ...els.filter(e => e.data.source)]);
+  cy.layout({name: "preset"}).run();
+  cy.edges().forEach(e => {
+    const [a, b] = [e.source().data("col"), e.target().data("col")];
+    if (a == null || b == null) e.addClass("vertical").data("lane", "shared");  // to the shared row below
+    else if (b < a) e.addClass("back");
+    else e.addClass("side");  // out of the source's right side, into the target's left side
+  });
+  // Elbow arrows in the same lane turn at different points, ordered by height (or by x for the vertical arrows to
+  // the shared row), so they fan out instead of merging into one line.
+  const lanes = {};
+  cy.edges().not(".back").forEach(e => {
+    const lane = e.data("lane") || `${e.source().data("col")}>${e.target().data("col")}`;
+    (lanes[lane] ??= []).push(e);
+  });
+  for (const [lane, list] of Object.entries(lanes)) {
+    const axis = e => e.hasClass("vertical") ? "x" : "y";
+    const at = e => e.source().position(axis(e)) + e.target().position(axis(e));
+    list.sort((a, b) => at(a) - at(b));
+    list.forEach((e, i) => e.style("taxi-turn", list.length > 1 ? `${20 + 60 * i / (list.length - 1)}%` : "50%"));
+  }
+  cy.fit(undefined, 30);
+}
+
+function crumbs(g) {
+  const c = document.getElementById("crumbs");
+  c.innerHTML = g ? `<button id="up">All groups</button> › ${esc(g)}` : "All groups";
+  if (g) document.getElementById("up").onclick = topView;
+}
+
+function side(html) {
+  const s = document.getElementById("side");
+  s.innerHTML = html;
+  s.querySelectorAll("a[data-file]").forEach(a => a.onclick = () => showFile(a.dataset.file));
+}
+
+function showFile(id) {
+  const f = file[id];
+  const out = M.imports.filter(e => e.from === id), into = M.imports.filter(e => e.to === id);
+  const callers = M.callers[id];
+  const uses = M.asset_edges.filter(e => e.file === id);
+  const item = (other, names) => `<li>${fileLink(other)}${names.length ? ` <span class="names">${
+    esc(names.join(", "))}</span>` : ""}</li>`;
+  side(`<h2>${esc(id)}</h2><span class="chip ${groupKind[f.group]}">${esc(f.group)}</span>
+    <p>${f.doc ? esc(f.doc) : '<span class="muted">No module docstring.</span>'}</p>
+    <a class="open" href="${vscode(id)}">Open in VS Code</a>
+    ${callers ? `<h3>Callers by name</h3>${Object.entries(callers).map(([n, cs]) =>
+      `<div><b>${esc(n)}</b><ul>${cs.map(c => `<li>${fileLink(c)}</li>`).join("")}</ul></div>`).join("")}` : ""}
+    ${uses.length ? `<h3>Store and registry</h3><ul>${uses.map(e =>
+      `<li>${e.dir} <b>${esc(e.asset)}</b> <span class="names">line ${e.line}</span></li>`).join("")}</ul>` : ""}
+    <h3>Imports</h3>${out.length ? `<ul>${out.map(e => item(e.to, e.names)).join("")}</ul>` :
+      '<p class="muted">No src files.</p>'}
+    <h3>Imported by</h3>${into.length ? `<ul>${into.map(e => item(e.from, e.names)).join("")}</ul>` :
+      '<p class="muted">Nothing in src.</p>'}`);
+}
+
+function showAsset(id) {
+  const a = assetOf[id];
+  const rows = M.asset_edges.filter(e => e.asset === id);
+  side(`<h2>${esc(id)}</h2><p class="muted">${esc(a.value)}, defined in ${esc(a.via)}.</p>` +
+    ["write", "read", "touch"].map(d => {
+      const r = rows.filter(e => e.dir === d);
+      return r.length ? `<h3>${d}</h3><ul>${r.map(e => `<li>${fileLink(e.file)} <span class="names">line ${
+        e.line}</span></li>`).join("")}</ul>` : "";
+    }).join(""));
+}
+
+cy.on("tap", "node", ev => {
+  const d = ev.target.data();
+  if (d.group) groupView(d.group);
+  else if (d.file) showFile(d.file);
+  else if (d.asset) showAsset(d.asset);
+});
+cy.on("dbltap", "node", ev => { const d = ev.target.data(); if (d.file) location.href = vscode(d.file); });
+
+// Hovering over a box fades everything it is not linked to. An entry point chip stands for its group.
+cy.on("mouseover", "node", ev => {
+  const n = ev.target.hasClass("job") ? ev.target.parent() : ev.target;
+  let keep = n.union(n.descendants());
+  keep = keep.union(keep.connectedEdges());
+  keep = keep.union(keep.connectedNodes());
+  keep = keep.union(keep.ancestors()).union(keep.filter(":parent").descendants());
+  cy.elements().removeClass("faded");
+  cy.elements().not(keep).addClass("faded");
+});
+cy.on("mouseout", "node", () => cy.elements().removeClass("faded"));
+
+const tip = document.getElementById("tip");
+cy.on("mouseover", "edge", ev => {
+  const t = ev.target.data("tip");
+  if (!t) return;
+  tip.textContent = t.slice(0, 15).join("\n") + (t.length > 15 ? `\n… ${t.length - 15} more` : "");
+  tip.style.display = "block";
+});
+cy.on("mousemove", ev => {
+  const p = ev.originalEvent;
+  if (p) { tip.style.left = p.clientX + 14 + "px"; tip.style.top = p.clientY + 14 + "px"; }
+});
+cy.on("mouseout", "edge", () => tip.style.display = "none");
+
+const key = (shape, style, text) => `<div class="row"><span class="${shape}" style="${style}"></span>${text}</div>`;
+document.getElementById("legend").innerHTML = "<summary>Legend</summary>" + [
+  key("sw", "background:var(--group);border-color:var(--group-edge)",
+    M.ml ? "Pipeline or group, with its number of files" : "Group, with its number of files"),
+  M.groups.some(g => g.jobs.length) && key("sw", "background:var(--bg);border-color:var(--group-edge)",
+    "▶ Entry point inside it (job or script)"),
+  key("sw", "background:var(--shared);border-color:var(--shared-edge)", "Shared modules"),
+  M.ml && key("sw", "background:var(--asset);border-color:var(--asset-edge);border-radius:6px",
+    "Store or registry name"),
+  M.assets.some(a => a.platform) && key("sw", "background:transparent;border:1.5px dashed var(--asset-edge)",
+    "Platform the names live on"),
+  key("sw", "background:var(--ghost);border:1.5px dashed var(--edge)", "Empty package, or a file in another group"),
+  M.ml && key("ln", "border-color:var(--write)", "Writes"),
+  M.ml && key("ln", "border-color:var(--read)", "Reads"),
+  key("ln", "border-color:var(--edge)", "Imports, with how many"),
+  key("ln", "border-top:2px dashed var(--edge)",
+    M.ml ? "Loops back, or uses a name without a read or write call" : "Loops back"),
+].filter(Boolean).join("") + '<div class="hint">Hover over a box to highlight its links. Click a group to open it.</div>';
+
+// Tour
+const tourlist = document.getElementById("tourlist"), steps = document.getElementById("steps");
+function showTour(i) {
+  tourlist.querySelectorAll("button").forEach((b, j) => b.classList.toggle("on", i === j));
+  const t = M.tours[i];
+  steps.innerHTML = `<h2>${esc(t.entry)}</h2><p class="muted">Every file this entry point reaches, depth first in
+    the order it imports them.</p>` + t.steps.map((id, n) => `<div class="step"><span class="n">${n + 1}</span><div>
+    <a class="file" href="${vscode(id)}">${esc(id)}</a><span class="chip ${groupKind[file[id].group]}">${
+    esc(file[id].group)}</span><div>${file[id].doc ? esc(file[id].doc) : '<span class="muted">No docstring.</span>'
+    }</div></div></div>`).join("");
+}
+if (M.tours.length) {
+  tourlist.innerHTML = M.tours.map((t, i) => `<button>${esc(t.entry)}<br><span class="muted">${
+    t.steps.length} files</span></button>`).join("");
+  tourlist.querySelectorAll("button").forEach((b, i) => b.onclick = () => showTour(i));
+  showTour(0);
+} else {
+  steps.innerHTML = '<p class="muted">No entry points were found, so there is no tour.</p>';
+}
+
+topView();
+</script>
+</body>
+</html>

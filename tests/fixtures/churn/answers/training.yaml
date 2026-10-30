@@ -1,0 +1,12 @@
+models:
+  - name: logistic
+    type: logistic
+    tuning: {n_trials: 8}
+    reason: The simple model first.
+  - name: lightgbm
+    type: lightgbm
+    tuning: {n_trials: 10, timeout_minutes: 5}
+    reason: Gradient boosting usually does best on tables.
+training: {seed: 42, selection: best_mean}
+reasoning:
+  models: Start simple, then gradient boosting.

@@ -1,0 +1,1497 @@
+#!/usr/bin/env python3
+"""Shared code for the ML project skills: project root, folder layout, kernel naming, and the
+shared spec file (ml_spec.yaml).
+
+The canonical copy lives in claude-skills/_ml_shared/ml_common.py. Every ML skill keeps an identical copy
+in its own scripts folder so it works on its own. Edit the canonical copy, then run
+`python3 tools/sync_ml_shared.py` from the claude-skills folder to update the copies.
+
+Uses only the standard library. PyYAML is used when installed (the project .venv has it);
+without it the spec is written as JSON, which is also valid YAML.
+
+Commands (run with the project's Python from the project root, for example .venv/bin/python):
+    ml_common.py root                          # the project root and how it was found
+    ml_common.py path                          # the spec path
+    ml_common.py paths                         # the project folders from the spec, and whether they exist
+    ml_common.py init --name churn_v1 [--description "..."]
+    ml_common.py show [--section framing]
+    ml_common.py status                        # step progress, open questions, and the next skill to run
+    ml_common.py next                          # just the next step and skill
+    ml_common.py gate                          # exit 1 with reasons when modelling should not start yet
+    ml_common.py validate                      # structure errors and required fields still empty
+    ml_common.py merge business answers.yaml --skill ml-business-framing   # overwrite keys in a section
+    ml_common.py fill project values.json --skill ml-project-setup       # set only keys that are empty
+    ml_common.py columns data/raw/train.csv    # column names and types only, never values
+    ml_common.py notebook-name eda --suffix train   # 04_eda_train.ipynb
+    ml_common.py need scikit-learn optuna      # exit 1 with the uv add command when a package is not installed
+
+Pass --spec PATH to any command to use a spec somewhere else.
+"""
+
+from __future__ import annotations
+
+import argparse
+import copy
+import datetime as _dt
+import json
+import os
+import platform
+import re
+import sys
+
+SPEC_VERSION = 1
+SPEC_NAME = "ml_spec.yaml"
+
+# The workflow, in order. Each stage owns one spec section and has one skill. Stage numbers prefix the stage's
+# notebooks.
+WORKFLOW = [
+    # (stage, skill, notebook number, short description)
+    ("setup", "ml-project-setup", 0, "project folder, .venv, kernel, and spec"),
+    ("business", "ml-business-framing", 1, "business goal, decision, current approach, success, constraints"),
+    ("discovery", "ml-data-discovery", 2, "sources, grain, time coverage, joins, data dictionary, framing hints"),
+    ("framing", "ml-problem-framing", 3, "target, unit of prediction, prediction time, window, metric"),
+    ("eda", "ml-eda-report", 4, "target analysis, leakage, and checks against the framing"),
+    ("split", "ml-train-test-split", 5, "train, validation, and test sets"),
+    ("features", "ml-feature-engineering", 6, "feature pipeline fitted on training data only"),
+    ("baseline", "ml-baseline-model", 7, "dummy, heuristic, and simple model baselines"),
+    ("training", "ml-model-training", 8, "main model with cross validation"),
+    ("evaluation", "ml-offline-evaluation", 9, "test results, segments, calibration, model card"),
+    ("system", "ml-system-design", 11, "design of the end to end system: pipelines, registry gate, serving, monitoring"),
+]
+# The base name of each stage's notebook, after its number: 01_business_framing.ipynb, 04_eda_<dataset>.ipynb.
+NOTEBOOK_BASE = {
+    "setup": "scratch",
+    "business": "business_framing",
+    "discovery": "data_discovery",
+    "framing": "problem_framing",
+    "eda": "eda",
+    "split": "split",
+    "features": "features",
+    "baseline": "baseline",
+    "training": "training",
+    "evaluation": "evaluation",
+    "system": "system_design",  # no notebook: the stage writes docs/system_design.md
+}
+STAGES = [w[0] for w in WORKFLOW]
+STAGE_NUMBER = {w[0]: w[2] for w in WORKFLOW if w[2] is not None}
+STAGE_SKILL = {w[0]: w[1] for w in WORKFLOW}
+# Helper skills that keep a notebook of their own but are not workflow steps.
+STAGE_NUMBER["review"] = 10
+NOTEBOOK_BASE["review"] = "review"
+STAGE_SKILL["review"] = "ml-review"
+
+# The steps a project goes through, in order. Kept separate from WORKFLOW so a stage can run in more than one step:
+# the business stage runs twice, first for the mode and the two anchors (before the data), then for the full
+# framing, drafted from what data discovery found.
+STEPS = []
+for _stage, _skill, _, _what in WORKFLOW:
+    if _stage == "business":
+        STEPS.append(("business_anchors", _skill, "anchors only",
+                      "project mode and the two anchors that come before the data"))
+        _business_step = ("business", _skill, "full framing",
+                          "the rest of the business framing, drafted from the data: outcome, current approach, "
+                          "output use, V1 bar, constraints")
+        continue
+    STEPS.append((_stage, _skill, "", _what))
+    if _stage == "discovery":
+        STEPS.append(_business_step)
+del _stage, _skill, _what, _business_step
+# Each step's stage: the section and notebook it works on.
+STEP_STAGE = {s[0]: ("business" if s[0] == "business_anchors" else s[0]) for s in STEPS}
+EDA_MODES = ("discovery", "targeted")
+
+# Folders relative to the project root. Stored in the spec under paths, so a project can override them.
+DEFAULT_PATHS = {
+    "data_raw": "data/raw",
+    "data_processed": "data/processed",
+    "notebooks": "notebooks",
+    "src": "src",
+    "models": "models",
+    "docs": "docs",
+}
+
+BUSINESS_TODO = "The business problem has not been framed yet. Run the ml-business-framing skill."
+FRAMING_TODO = "The ML problem has not been framed yet. Run the ml-problem-framing skill before building features."
+PREV_FRAMING_TODO = "The ML problem has not been framed yet. Run the ml-framing skill before building features."
+OLD_FRAMING_TODO = "The problem has not been framed yet. Run the problem-framing skill before building features."
+OLD_BUSINESS_TODO = "The business problem has not been framed yet. Run the business-framing skill."
+BUSINESS_STATUS = {"not_started", "draft", "confirmed"}
+# standard: a clear business goal and KPI. exploratory: an experiment, framed by what it should teach and what each
+# answer would lead to. A spec without a mode is standard.
+BUSINESS_MODES = {"standard", "exploratory"}
+# The two anchors asked before anyone looks at the data, by mode.
+BUSINESS_ANCHORS = {"standard": ["business_goal", "decision_supported"],
+                    "exploratory": ["learning_question", "answer_actions"]}
+ML_NEEDED = {"yes", "no", "unsure"}
+TASK_TYPES = {"binary_classification", "multiclass_classification", "regression", "ranking", "forecasting", "other"}
+FRAMING_STATUS = {"not_started", "draft", "confirmed"}
+
+# Packages that only some stages need, so new projects do not install them up front. A stage checks for them with
+# `ml_common.py need <package>` and asks the user before running `uv add`. Package name: import name.
+IMPORT_NAMES = {"scikit-learn": "sklearn", "pyyaml": "yaml", "optuna": "optuna", "statsmodels": "statsmodels",
+                "lightgbm": "lightgbm", "xgboost": "xgboost", "catboost": "catboost"}
+
+try:
+    import yaml
+except Exception:  # pragma: no cover
+    yaml = None
+
+
+# ---------------------------------------------------------------- names
+
+def slugify(name):
+    return re.sub(r"[^a-z0-9._-]+", "-", str(name).lower()).strip("-") or "project"
+
+
+def file_slug(name):
+    """A safe part of a file name, for example a dataset name in 04_eda_customers.ipynb."""
+    return re.sub(r"[^a-z0-9]+", "_", str(name).lower()).strip("_") or "data"
+
+
+def kernel_name(project_name):
+    """The Jupyter kernel name for a project, for example 'martech_adtech_data'."""
+    return slugify(project_name)
+
+
+def kernel_display(project_name, python_version=None):
+    """How editors show the project kernel, for example 'martech_adtech_data (.venv, Python 3.11.6)'."""
+    return f"{project_name} (.venv, Python {python_version or platform.python_version()})"
+
+
+def notebook_name(stage, suffix=None):
+    """Numbered notebook name for a workflow stage, in workflow order: notebook_name('business') gives
+    '01_business_framing.ipynb', and notebook_name('eda', 'customers') gives '04_eda_customers.ipynb'."""
+    n = STAGE_NUMBER.get(stage)
+    stem = NOTEBOOK_BASE.get(stage, stage)
+    base = f"{n:02d}_{stem}" if n is not None else stem
+    return base + (f"_{file_slug(suffix)}" if suffix else "") + ".ipynb"
+
+
+def doc_name(stage, suffix=None):
+    """Document name for a stage, for example doc_name('eda', 'customers') gives 'eda_customers.md'."""
+    return stage + (f"_{file_slug(suffix)}" if suffix else "") + ".md"
+
+
+# ---------------------------------------------------------------- project root
+
+def _walk_up(start):
+    d = os.path.abspath(start)
+    home = os.path.expanduser("~")
+    while True:
+        yield d
+        if d == home or os.path.dirname(d) == d:
+            return
+        d = os.path.dirname(d)
+
+
+def find_project_root(start="."):
+    """Return (root, reason). The root is the nearest folder with ml_spec.yaml, else the nearest with .venv,
+    else the nearest with .git. The search stops at the home folder. Returns (None, reason) when none is found."""
+    for marker, why in ((SPEC_NAME, "has ml_spec.yaml"), (".venv", "has .venv"), (".git", "has .git")):
+        for d in _walk_up(start):
+            if os.path.exists(os.path.join(d, marker)):
+                return d, why
+    return None, "no folder with ml_spec.yaml, .venv, or .git between here and the home folder"
+
+
+def spec_path(explicit=None, start="."):
+    """The spec path: the explicit path, else <project root>/ml_spec.yaml, else ./ml_spec.yaml."""
+    if explicit:
+        return os.path.abspath(explicit)
+    root, _ = find_project_root(start)
+    return os.path.join(root or os.path.abspath(start), SPEC_NAME)
+
+
+def project_python(root):
+    """The project's own interpreter, or None when the project has no .venv."""
+    for rel in ("bin/python", "Scripts/python.exe"):
+        p = os.path.join(root, ".venv", rel)
+        if os.path.exists(p):
+            return p
+    return None
+
+
+def project_paths(spec, root):
+    """Absolute folder paths for the project, from spec['paths'] with defaults for missing keys."""
+    paths = dict(DEFAULT_PATHS)
+    paths.update({k: v for k, v in ((spec or {}).get("paths") or {}).items() if v})
+    # Nested entries, such as the pipelines map ml-project-setup adds, are not folders of their own
+    return {k: (v if os.path.isabs(v) else os.path.normpath(os.path.join(root, v)))
+            for k, v in paths.items() if isinstance(v, str)}
+
+
+def relpath(path, root):
+    """path relative to root when it is inside root, else unchanged."""
+    if not path:
+        return path
+    r = os.path.relpath(os.path.abspath(path), os.path.abspath(root))
+    return path if r.startswith("..") else r
+
+
+# ---------------------------------------------------------------- spec layout
+
+def _now():
+    return _dt.datetime.now().replace(microsecond=0).isoformat()
+
+
+def template(name=None, description=None):
+    """An empty spec. Every key is present so people can see what is expected."""
+    now = _now()
+    return {
+        "spec_version": SPEC_VERSION,
+        "project": {
+            "name": name,
+            "description": description,
+            "owner": None,
+            "python": None,
+            "kernel": None,
+            "kernel_display": None,
+            "created": now,
+            "updated": now,
+        },
+        "paths": dict(DEFAULT_PATHS),
+        "business": {
+            "status": "not_started",  # not_started, draft, confirmed
+            "mode": None,  # standard or exploratory; empty means standard
+            "learning_question": None,  # exploratory: what the project should find out
+            "answer_actions": [],  # exploratory: each {answer, action}, what would be done with each answer
+            "business_goal": None,
+            "business_kpi": None,
+            "decision_supported": None,
+            "users": None,
+            "capacity": None,
+            "current_approach": None,
+            "outcome": None,  # what should be predicted, in business terms
+            "output_use": None,  # ranked_list, threshold_decision, probability, quantity, other
+            "v1_bar_intent": None,
+            "ml_needed": None,  # yes, no, unsure
+            "ml_needed_reason": None,
+            "constraints": {
+                "latency": None,
+                "interpretability": None,
+                "fairness": None,
+                "data_access": None,
+                "other": [],
+            },
+            "out_of_scope": [],
+            "risks": [],  # each: {problem, resolution}, found when the framing was checked
+        },
+        "discovery": {},
+        "framing": {
+            "status": "not_started",
+            "task_type": None,
+            "target": {
+                "name": None,
+                "definition": None,
+                "positive_class": None,
+                "outcome_window": None,
+                "exists_in_data": None,
+                "construction": None,
+                "label_delay": None,
+            },
+            "unit_of_prediction": None,
+            "entity_id_cols": [],
+            "population": None,
+            "prediction_time": {
+                "description": None,
+                "column": None,
+                "feature_cutoff": None,
+                "cadence": None,
+                "horizon": None,
+            },
+            "success": {
+                "primary_metric": None,
+                "secondary_metrics": [],
+                "v1_bar": None,
+                "v1_criteria": [],  # the V1 bar as checks a script can apply; see V1_KINDS
+                "guardrails": [],
+            },
+        },
+        "data": {
+            "sources": [],
+            "date_col": None,
+            "id_cols": [],
+            "excluded_cols": [],
+        },
+        "eda": {},
+        "notebooks": {},  # stage: {path, decisions_hash, run_at}, written when a stage notebook runs
+        "split": {},
+        "features": {},
+        "baseline": {},
+        "training": {},
+        "evaluation": {},
+        "system": {},  # written by ml-system-design (scripts/design.py), never by a notebook
+        "iterations": {"current": None, "entries": []},  # written by the ml-iterate helper skill
+        "autopilot": {},  # written by the ml-autopilot helper skill when an agent drives the workflow
+        "assumptions": [],
+        "open_questions": [],
+        "decisions": [],
+        "history": [],
+    }
+
+
+REQUIRED_BUSINESS = ["business_goal", "decision_supported", "outcome"]
+RECOMMENDED_BUSINESS = ["business_kpi", "users", "current_approach", "output_use", "v1_bar_intent", "ml_needed"]
+REQUIRED_BUSINESS_EXPLORATORY = ["learning_question", "answer_actions", "outcome"]
+RECOMMENDED_BUSINESS_EXPLORATORY = ["output_use", "v1_bar_intent", "ml_needed"]
+
+
+def business_mode(spec_or_business):
+    """standard or exploratory. Accepts the spec or its business section; an empty mode is standard."""
+    d = spec_or_business or {}
+    bus = d.get("business") if isinstance(d.get("business"), dict) else d
+    return "exploratory" if (bus or {}).get("mode") == "exploratory" else "standard"
+
+
+def business_fields(spec_or_business):
+    """(required, recommended) business fields for the project's mode."""
+    if business_mode(spec_or_business) == "exploratory":
+        return REQUIRED_BUSINESS_EXPLORATORY, RECOMMENDED_BUSINESS_EXPLORATORY
+    return REQUIRED_BUSINESS, RECOMMENDED_BUSINESS
+
+
+def anchors_done(spec):
+    """True when the mode is set and both anchors for it are filled, or the business framing is confirmed (projects
+    from before the anchors step are not sent back)."""
+    bus = (spec or {}).get("business") or {}
+    if bus.get("status") == "confirmed":
+        return True
+    if bus.get("mode") not in BUSINESS_MODES:
+        return False
+    return all(not _empty(bus.get(k)) for k in BUSINESS_ANCHORS[bus["mode"]])
+REQUIRED_FRAMING = [
+    "task_type",
+    "target.definition",
+    "unit_of_prediction",
+    "prediction_time.description",
+    "success.primary_metric",
+    "success.v1_bar",
+]
+RECOMMENDED_FRAMING = [
+    "success.v1_criteria",
+    "target.outcome_window",
+    "target.exists_in_data",
+    "entity_id_cols",
+    "population",
+    "prediction_time.feature_cutoff",
+    "prediction_time.cadence",
+]
+
+# Fields that moved from framing to business when the framing was split into ml-business-framing and ml-problem-framing.
+_MOVED_TO_BUSINESS = {
+    "business_goal": "business_goal",
+    "decision_supported": "decision_supported",
+    "users": "users",
+    "current_approach": "current_approach",
+    "constraints": "constraints",
+    "out_of_scope": "out_of_scope",
+}
+
+
+def migrate(spec):
+    """Bring a spec written by older skill versions up to date, in place, and return it.
+
+    Specs from before the business section existed kept the business fields in framing. They move to business,
+    which takes the framing status. Nothing is deleted except the moved keys.
+    """
+    if not isinstance(spec, dict):
+        return spec
+    bus0 = spec.get("business")
+    if isinstance(bus0, dict) and isinstance(bus0.get("ml_needed"), bool):
+        # YAML reads an unquoted yes or no as true or false.
+        bus0["ml_needed"] = "yes" if bus0["ml_needed"] else "no"
+    fr = spec.get("framing")
+    if isinstance(fr, dict) and any(k in fr for k in _MOVED_TO_BUSINESS):
+        bus = dict(spec.get("business") or {})
+        for old, new in _MOVED_TO_BUSINESS.items():
+            if old in fr:
+                v = fr.pop(old)
+                if _empty(bus.get(new)) and not _empty(v):
+                    bus[new] = v
+        succ = fr.get("success") or {}
+        if "business_kpi" in succ:
+            v = succ.pop("business_kpi")
+            if _empty(bus.get("business_kpi")) and not _empty(v):
+                bus["business_kpi"] = v
+        if _empty(bus.get("outcome")) and not _empty((fr.get("target") or {}).get("definition")):
+            bus["outcome"] = fr["target"]["definition"]
+        if _empty(bus.get("status")) or bus.get("status") == "not_started":
+            st = fr.get("status") or "not_started"
+            bus["status"] = st if st in BUSINESS_STATUS else "draft"
+        spec["business"] = bus
+    ap = spec.get("autopilot")
+    if isinstance(ap, dict) and isinstance(ap.get("settings"), dict):
+        ap["settings"] = _autopilot_settings_now(ap["settings"])
+    return spec
+
+
+# ---------------------------------------------------------------- reading and writing
+
+def load(path):
+    with open(path, encoding="utf-8") as f:
+        text = f.read()
+    if not text.strip():
+        return {}
+    if yaml is not None:
+        data = yaml.safe_load(text)
+    else:
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError:
+            sys.exit(f"{path} is YAML, and PyYAML is not installed in {sys.executable}. Run this with the "
+                     f"project's .venv/bin/python, or install it with: {sys.executable} -m pip install pyyaml")
+    if data is None:
+        return {}
+    if not isinstance(data, dict):
+        sys.exit(f"{path} does not hold a mapping at the top level, so it is not a valid spec.")
+    _fix_yaml_on(data)
+    return data
+
+
+def _fix_yaml_on(obj):
+    """YAML 1.1 (PyYAML) reads an unquoted `on:` key as the boolean True, so `{kind: ..., on: test}` loses the
+    key the V1 criteria are judged by; once saved, the key becomes the text "True". Rename either back to "on" in
+    every v1_criteria list, wherever it is (the spec, an answers file, or an answers file kept under answers:)."""
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            if k == "v1_criteria" and isinstance(v, list):
+                for c in v:
+                    key = next((k for k in _ON_KEYS if isinstance(c, dict) and k in c), None)
+                    if key is not None and "on" not in c:
+                        c["on"] = c.pop(key)
+            else:
+                _fix_yaml_on(v)
+    elif isinstance(obj, list):
+        for v in obj:
+            _fix_yaml_on(v)
+
+
+_ON_KEYS = (True, "True", "true")
+
+
+def criterion_on(c):
+    """Whether a V1 criterion is judged on cv or test (cv when not set), also when YAML read `on` as True."""
+    if not isinstance(c, dict):
+        return "cv"
+    return c.get("on") or next((c[k] for k in _ON_KEYS if k in c), "cv")
+
+
+if yaml is not None:
+    class _Dumper(yaml.SafeDumper):
+        pass
+
+    def _str_rep(dumper, s):
+        return dumper.represent_scalar("tag:yaml.org,2002:str", s, style="|" if "\n" in s else None)
+
+    _Dumper.add_representer(str, _str_rep)
+
+    def _indent_lists(self, flow=False, indentless=False):  # lists indented under their key
+        return yaml.SafeDumper.increase_indent(self, flow, False)
+
+    _Dumper.increase_indent = _indent_lists
+else:  # pragma: no cover
+    _Dumper = None
+
+
+HEADER = (
+    "# Shared spec for this ML project. Each skill reads it first and writes only its own section.\n"
+    "# You can edit it by hand. Keep the keys, and use null for anything not known yet.\n"
+    "# Field meanings: reference/spec_fields.md in any of the ML project skills.\n"
+)
+
+
+def dump_text(data):
+    if yaml is not None:
+        return yaml.dump(data, Dumper=_Dumper, sort_keys=False, allow_unicode=True, default_flow_style=False,
+                         width=110)
+    return json.dumps(data, indent=2, ensure_ascii=False, default=str) + "\n"
+
+
+def _auto_resolve(data):
+    """Close open questions that the spec itself now answers."""
+    done = {
+        FRAMING_TODO: (((data.get("framing") or {}).get("status") or "not_started") != "not_started",
+                       "The ML framing was started with the ml-problem-framing skill."),
+        BUSINESS_TODO: (((data.get("business") or {}).get("status") or "not_started") != "not_started",
+                        "The business framing was started with the ml-business-framing skill."),
+    }
+    done[OLD_FRAMING_TODO] = done[BUSINESS_TODO]
+    done[PREV_FRAMING_TODO] = done[FRAMING_TODO]
+    done[OLD_BUSINESS_TODO] = done[BUSINESS_TODO]
+    for q in data.get("open_questions") or []:
+        if isinstance(q, dict) and q.get("status") == "open" and q.get("question") in done:
+            ok, answer = done[q["question"]]
+            if ok:
+                q["status"] = "resolved"
+                q["answer"] = answer
+
+
+def save(path, data):
+    _auto_resolve(data)
+    data = _clean(data)
+    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        if yaml is not None:
+            f.write(HEADER)
+        f.write(dump_text(data))
+    os.replace(tmp, path)
+    return path
+
+
+def _clean(x):
+    """Turn numpy and pandas values into plain Python so YAML stays readable."""
+    if isinstance(x, dict):
+        return {str(k): _clean(v) for k, v in x.items()}
+    if isinstance(x, (list, tuple, set)):
+        return [_clean(v) for v in x]
+    if hasattr(x, "item") and not isinstance(x, (str, bytes)):
+        try:
+            x = x.item()
+        except Exception:
+            return str(x)
+    if isinstance(x, float):
+        return None if x != x else round(x, 6)
+    if isinstance(x, (_dt.date, _dt.datetime)):
+        return x.isoformat()
+    if x is None or isinstance(x, (str, int, bool)):
+        return x
+    return str(x)
+
+
+# ---------------------------------------------------------------- updates
+
+def deep_merge(base, new):
+    """Merge new into base. Dicts merge key by key, everything else (lists included) is replaced."""
+    out = copy.deepcopy(base)
+    for k, v in (new or {}).items():
+        if isinstance(v, dict) and isinstance(out.get(k), dict):
+            out[k] = deep_merge(out[k], v)
+        else:
+            out[k] = copy.deepcopy(v)
+    return out
+
+
+def _empty(v):
+    return v is None or (isinstance(v, (str, list, dict)) and len(v) == 0)
+
+
+def fill_missing(base, new):
+    """Like deep_merge, but only sets keys that are missing or empty in base."""
+    out = copy.deepcopy(base)
+    for k, v in (new or {}).items():
+        if isinstance(v, dict) and isinstance(out.get(k), dict):
+            out[k] = fill_missing(out[k], v)
+        elif _empty(out.get(k)) and not _empty(v):
+            out[k] = copy.deepcopy(v)
+    return out
+
+
+def load_or_create(path, name=None):
+    """Return (spec, created). Keys added to the template since the spec was written are filled in,
+    without touching existing values."""
+    if path and os.path.exists(path):
+        spec = migrate(load(path))
+        merged = deep_merge(template((spec.get("project") or {}).get("name") or name), spec)
+        if not spec.get("paths"):
+            # An older spec without paths: leave them empty, so ml-project-setup can record the real layout.
+            # project_paths() applies the defaults when reading.
+            merged["paths"] = {}
+        return merged, False
+    return template(name), True
+
+
+def add_open_questions(spec, questions, stage, raised_by):
+    """Add questions not already listed (same text). Each item is a string, which uses the given stage,
+    or a (question, stage) pair. Returns the number added."""
+    spec["open_questions"] = list(spec.get("open_questions") or [])
+    existing = {q.get("question") for q in spec["open_questions"] if isinstance(q, dict)}
+    ids = [int(str(q.get("id"))[1:]) for q in spec["open_questions"]
+           if isinstance(q, dict) and re.fullmatch(r"Q\d+", str(q.get("id", "")))]
+    n, added = max(ids, default=0), 0
+    for item in questions:
+        q, st = item if isinstance(item, (tuple, list)) else (item, stage)
+        if q in existing:
+            continue
+        n += 1
+        spec["open_questions"].append({"id": f"Q{n}", "question": q, "stage": st, "raised_by": raised_by,
+                                       "status": "open"})
+        existing.add(q)
+        added += 1
+    return added
+
+
+def log(spec, skill, action):
+    spec.setdefault("history", []).append({"at": _now(), "skill": skill, "action": action})
+    spec.setdefault("project", {})["updated"] = _now()
+
+
+def update_section(path, section, data, skill, replace=True, open_questions=None, question_stage=None,
+                   extra=None, action=None, name=None):
+    """Write one section of the spec and log it. Creates the spec when it does not exist.
+
+    replace=True overwrites the section, which suits generated sections such as eda.
+    extra is merged into other sections, for example {"data": {"sources": [...]}}.
+    Returns (path, created).
+    """
+    spec, created = load_or_create(path, name=name)
+    spec[section] = data if replace else deep_merge(spec.get(section) or {}, data)
+    for k, v in (extra or {}).items():
+        spec[k] = deep_merge(spec.get(k) or {}, v) if isinstance(v, dict) else v
+    if open_questions:
+        add_open_questions(spec, open_questions, question_stage or section, skill)
+    log(spec, skill, action or (("created spec and wrote " if created else "updated ") + section))
+    save(path, spec)
+    return path, created
+
+
+# ---------------------------------------------------------------- reading the spec
+
+def _get(d, dotted):
+    for part in dotted.split("."):
+        if not isinstance(d, dict):
+            return None
+        d = d.get(part)
+    return d
+
+
+# ---------------------------------------------------------------- the autopilot and its workspaces
+
+# What ml-autopilot does without asking, unless the user chose otherwise at the start of a run. max_parallel is how
+# many experiments of a round run at once (at most MAX_PARALLEL); a round tries every open backlog item.
+AUTOPILOT_DEFAULTS = {"max_parallel": 3, "unattended": True}
+MAX_PARALLEL = 5
+# Where an agent stops for a person. Each kind names the step it guards.
+CHECKPOINT_KINDS = {"business": "business", "framing": "framing", "test_v1": "evaluation", "test_final": "evaluation"}
+CHECKPOINT_STATUS = {"open", "cleared"}
+WORKSPACE_FILE = ".ml_workspace.json"
+
+
+def workspace_info(root):
+    """The work a workspace (a git worktree made by workspace.py) holds, from the WORKSPACE_FILE at its root:
+    {kind, experiment or version, iteration, parent_run, main_root, branch, ...}, or None outside one. kind is
+    experiment (an ml-autopilot experiment, run by an agent) or iteration (an ml-iterate iteration with
+    --worktree, run with a person); files from before kinds existed are experiments."""
+    if not root:
+        return None
+    p = os.path.join(root, WORKSPACE_FILE)
+    if not os.path.exists(p):
+        return None
+    try:
+        with open(p, encoding="utf-8") as f:
+            info = json.load(f)
+    except (OSError, ValueError):
+        return None
+    if not isinstance(info, dict):
+        return None
+    info.setdefault("kind", "experiment")
+    return info
+
+
+def experiment_workspace(root):
+    """workspace_info when the workspace holds an ml-autopilot experiment, else None."""
+    ws = workspace_info(root)
+    return ws if ws and ws["kind"] == "experiment" else None
+
+
+def _autopilot_settings_now(settings):
+    """Settings from before rounds tried the whole backlog: experiments_per_round becomes max_parallel, and
+    max_rounds goes (the rounds are capped by iterations.bar.max_iterations)."""
+    out = dict(settings or {})
+    if "experiments_per_round" in out:
+        out.setdefault("max_parallel", out.pop("experiments_per_round"))
+        out.pop("experiments_per_round", None)
+    out.pop("max_rounds", None)
+    return out
+
+
+def autopilot_settings(spec):
+    return {**AUTOPILOT_DEFAULTS, **_autopilot_settings_now(((spec or {}).get("autopilot") or {}).get("settings"))}
+
+
+# How an assumption a stage skill took without a person is marked in the spec's assumptions, which are plain text.
+AUTOPILOT_DRAFT = "Autopilot draft: "
+
+
+def assumption_text(a):
+    """An assumption as the plain text the spec keeps. A mapping such as {assumption, source: autopilot draft} (how
+    the stage skills record answers taken without a person) becomes text marked with AUTOPILOT_DRAFT."""
+    if isinstance(a, dict):
+        text = str(a.get("assumption") or a.get("text") or "").strip()
+        if "autopilot" in str(a.get("source") or "").lower() and not text.startswith(AUTOPILOT_DRAFT):
+            text = AUTOPILOT_DRAFT + text
+        return text
+    return str(a or "").strip()
+
+
+def is_autopilot_draft(a):
+    return assumption_text(a).startswith(AUTOPILOT_DRAFT)
+
+
+def autopilot_mode(args=None, root=None):
+    """True when a stage skill runs without a person: called by ml-autopilot (the word autopilot in its
+    arguments, or ML_AUTOPILOT=1), or inside an experiment's workspace. An iteration's workspace has a person."""
+    words = str(args or "").lower().replace(",", " ").split()
+    return ("autopilot" in words or "--autopilot" in words or os.environ.get("ML_AUTOPILOT") == "1"
+            or experiment_workspace(root) is not None)
+
+
+def open_checkpoints(spec):
+    return [c for c in (((spec or {}).get("autopilot") or {}).get("checkpoints") or [])
+            if isinstance(c, dict) and c.get("status") == "open"]
+
+
+def validate(spec):
+    """Return (errors, missing_required, missing_recommended)."""
+    errors = []
+    if not isinstance(spec, dict):
+        return ["The spec is not a mapping."], [], []
+    v = spec.get("spec_version")
+    if v is None:
+        errors.append("spec_version is missing.")
+    elif v != SPEC_VERSION:
+        errors.append(f"spec_version is {v}, but these skills expect {SPEC_VERSION}.")
+    fr = spec.get("framing") or {}
+    if not isinstance(fr, dict):
+        errors.append("framing must be a mapping.")
+        fr = {}
+    st = fr.get("status")
+    if st not in FRAMING_STATUS:
+        errors.append(f"framing.status is {st!r}. Use one of: {', '.join(sorted(FRAMING_STATUS))}.")
+    tt = fr.get("task_type")
+    if tt is not None and tt not in TASK_TYPES:
+        errors.append(f"framing.task_type is {tt!r}. Use one of: {', '.join(sorted(TASK_TYPES))}.")
+    for key in ("entity_id_cols", "out_of_scope"):
+        if fr.get(key) is not None and not isinstance(fr.get(key), list):
+            errors.append(f"framing.{key} must be a list.")
+    for key in ("assumptions", "open_questions", "decisions", "history"):
+        if spec.get(key) is not None and not isinstance(spec.get(key), list):
+            errors.append(f"{key} must be a list.")
+    paths = spec.get("paths")
+    if paths is not None and not isinstance(paths, dict):
+        errors.append("paths must be a mapping.")
+    data = spec.get("data") or {}
+    for key in ("sources", "id_cols", "excluded_cols"):
+        if data.get(key) is not None and not isinstance(data.get(key), list):
+            errors.append(f"data.{key} must be a list.")
+    for i, e in enumerate(data.get("excluded_cols") or []):
+        if not (isinstance(e, dict) and e.get("column")):
+            errors.append(f"data.excluded_cols[{i}] needs a column and a reason.")
+    bus = spec.get("business") or {}
+    if not isinstance(bus, dict):
+        errors.append("business must be a mapping.")
+        bus = {}
+    bst = bus.get("status")
+    if bst is not None and bst not in BUSINESS_STATUS:
+        errors.append(f"business.status is {bst!r}. Use one of: {', '.join(sorted(BUSINESS_STATUS))}.")
+    if bus.get("ml_needed") is not None and bus.get("ml_needed") not in ML_NEEDED:
+        errors.append(f"business.ml_needed is {bus.get('ml_needed')!r}. Use one of: {', '.join(sorted(ML_NEEDED))}.")
+    if bus.get("mode") is not None and bus.get("mode") not in BUSINESS_MODES:
+        errors.append(f"business.mode is {bus.get('mode')!r}. Use one of: {', '.join(sorted(BUSINESS_MODES))}.")
+    aa = bus.get("answer_actions")
+    if aa is not None and not isinstance(aa, list):
+        errors.append("business.answer_actions must be a list.")
+    for i, a in enumerate(aa if isinstance(aa, list) else []):
+        if not (isinstance(a, dict) and a.get("answer") and a.get("action")):
+            errors.append(f"business.answer_actions[{i}] needs an answer and an action.")
+    ap = spec.get("autopilot")
+    if ap is not None and not isinstance(ap, dict):
+        errors.append("autopilot must be a mapping.")
+        ap = {}
+    for i, c in enumerate((ap or {}).get("checkpoints") or []):
+        if not (isinstance(c, dict) and c.get("kind") in CHECKPOINT_KINDS and c.get("status") in CHECKPOINT_STATUS):
+            errors.append(f"autopilot.checkpoints[{i}] needs a kind ({', '.join(CHECKPOINT_KINDS)}) and a status "
+                          f"({', '.join(sorted(CHECKPOINT_STATUS))}).")
+    errors += [f"framing.success.v1_criteria: {p}" for p in v1_problems(((fr.get("success") or {}).get("v1_criteria")))]
+    leftovers = [k for k in _MOVED_TO_BUSINESS if k in fr]
+    if leftovers:
+        errors.append("framing still holds business fields (" + ", ".join(leftovers) + "). They belong in business. "
+                      "Any write through ml_common.py moves them.")
+    req_fields, rec_fields = business_fields(bus)
+    bus_req = [f"business.{k}" for k in req_fields if _empty(_get(bus, k))]
+    bus_rec = [f"business.{k}" for k in rec_fields if _empty(_get(bus, k))]
+    fr_req = [f"framing.{k}" for k in REQUIRED_FRAMING if _empty(_get(fr, k))]
+    fr_rec = [f"framing.{k}" for k in RECOMMENDED_FRAMING if _empty(_get(fr, k))]
+    if bst == "confirmed" and bus_req:
+        errors.append("business.status is confirmed, but required fields are empty: " + ", ".join(bus_req) + ".")
+    if st == "confirmed" and fr_req:
+        errors.append("framing.status is confirmed, but required fields are empty: " + ", ".join(fr_req) + ".")
+    return errors, bus_req + fr_req, bus_rec + fr_rec
+
+
+def eda_mode(spec):
+    """'discovery', 'targeted', or None when EDA has not run. Specs written before modes existed count as
+    targeted when the EDA had a target."""
+    eda = (spec or {}).get("eda") or {}
+    if not eda:
+        return None
+    return eda.get("mode") or ("targeted" if eda.get("target") else "discovery")
+
+
+def step_done(spec, step):
+    bus_status = ((spec.get("business") or {}).get("status")) or "not_started"
+    fr_status = ((spec.get("framing") or {}).get("status")) or "not_started"
+    if step == "setup":
+        return bool((spec.get("project") or {}).get("kernel"))
+    if step == "business_anchors":
+        return anchors_done(spec)
+    if step == "business":
+        return bus_status == "confirmed"
+    if step == "discovery":
+        # Skipped when the ML framing was confirmed directly, for example when the data was already well known.
+        return bool(spec.get("discovery")) or fr_status == "confirmed"
+    if step == "framing":
+        return fr_status == "confirmed"
+    if step == "eda":
+        return eda_mode(spec) == "targeted" and fr_status == "confirmed"
+    return bool(spec.get(step))
+
+
+def stage_done(spec, stage):
+    return step_done(spec, stage)
+
+
+def next_step(spec):
+    """The first step that is not done, as (step, skill, how), or (None, None, None) when all are done."""
+    for step, skill, how, _ in STEPS:
+        if not step_done(spec, step):
+            return step, skill, how
+    return None, None, None
+
+
+def next_stage(spec):
+    """The next step as (step, skill). See next_step for how to run it."""
+    step, skill, _ = next_step(spec)
+    return step, skill
+
+
+def modelling_blockers(spec):
+    """Reasons a modelling stage (split and later) should not start yet. Empty when it can."""
+    out = []
+    if (spec.get("business") or {}).get("ml_needed") == "no":
+        out.append("the business framing concluded that ML is not needed")
+    if not step_done(spec, "framing"):
+        out.append("the ML framing is not confirmed yet: run ml-problem-framing")
+    if not step_done(spec, "eda"):
+        out.append("the targeted EDA has not run on the confirmed target: run ml-eda-report")
+    return out
+
+
+def framing_defaults(spec):
+    """Settings that later skills take from the framing instead of asking again."""
+    fr = (spec or {}).get("framing") or {}
+    data = (spec or {}).get("data") or {}
+    tgt = fr.get("target") or {}
+    tt = fr.get("task_type")
+    target_type = {"binary_classification": "categorical", "multiclass_classification": "categorical",
+                   "regression": "continuous", "forecasting": "continuous"}.get(tt)
+    ids = list(dict.fromkeys([*(fr.get("entity_id_cols") or []), *(data.get("id_cols") or [])]))
+    return {
+        "status": fr.get("status"),
+        "target": tgt.get("name") if tgt.get("exists_in_data") is not False else None,
+        "target_type": target_type,
+        "task_type": tt,
+        "date_col": data.get("date_col") or (fr.get("prediction_time") or {}).get("column"),
+        "id_cols": ids,
+        "excluded_cols": [e.get("column") for e in (data.get("excluded_cols") or []) if isinstance(e, dict)],
+    }
+
+
+# ---------------------------------------------------------------- consistency between stages
+
+def days_in(text):
+    """Days in a phrase such as '60 days after the scoring date', '8 weeks', or 28. None when there is none."""
+    if text is None:
+        return None
+    if isinstance(text, (int, float)) and not isinstance(text, bool):
+        return float(text)
+    m = re.search(r"(\d+(?:\.\d+)?)\s*(day|week|month|year)", str(text), re.I)
+    if not m:
+        return None
+    return float(m.group(1)) * {"day": 1, "week": 7, "month": 30.4, "year": 365}[m.group(2).lower()]
+
+
+def parse_metric(text, date_col=None):
+    """A metric key and its settings from a phrase such as 'Recall at the top 500 customers per week' or 'PR AUC'.
+    Returns ({"key", "k", "k_share", "k_per"}, note). Used by the modelling skills and the consistency checks."""
+    t = str(text or "").lower()
+    m = {"key": None, "k": None, "k_share": None, "k_per": None}
+    rules = [(r"recall\s*(at|@)", "recall_at_k"), (r"precision\s*(at|@)", "precision_at_k"), (r"lift\s*(at|@)", "lift_at_k"),
+             (r"pr auc|pr-auc|average precision|auprc", "pr_auc"), (r"auc|roc", "roc_auc"),
+             (r"log ?loss|cross entropy", "log_loss"), (r"brier", "brier"), (r"rmse|root mean squared", "rmse"),
+             (r"wape|weighted absolute percentage", "wape"), (r"mape|mean absolute percentage", "mape"),
+             (r"\bmae\b|mean absolute error", "mae"), (r"\br2\b|r squared|r-squared", "r2")]
+    for pattern, key in rules:
+        if re.search(pattern, t):
+            m["key"] = key
+            break
+    if m["key"] and m["key"].endswith("_at_k"):
+        pct = re.search(r"(\d+(?:\.\d+)?)\s*%", t)
+        num = re.search(r"(\d[\d,]*)", t)
+        if pct:
+            m["k_share"] = float(pct.group(1)) / 100
+        elif num:
+            m["k"] = int(num.group(1).replace(",", ""))
+        if re.search(r"\bper\s+(week|day|month|scoring|date|run|batch)", t) and date_col:
+            m["k_per"] = date_col
+    note = None if m["key"] else f"Could not read a metric from {text!r}. Set the metric key by hand."
+    return m, note
+
+
+# ---------------------------------------------------------------- the V1 bar as checks
+
+# framing.success.v1_criteria: the V1 bar in a form a script (or an agent) can apply. Each criterion is a mapping
+# with an id, a kind, and on (cv or test: the scores it is judged on), plus the fields of its kind:
+#   beats_model         model (a model or baseline name), margin (default 0): the champion's primary metric is
+#                       better than that model's by at least the margin
+#   pct_over_reference  pct: the champion is at least pct % better than the baseline reference
+#   threshold           metric (default the primary metric), op (<, <=, >, >=), value
+#   check               function: a function in the project's src/v1_checks.py, given a context, that returns
+#                       (passed, detail); for guardrails such as "every media effect is non negative"
+#   manual              text: judged by a person; a bar with a manual criterion is never met by a script alone
+V1_KINDS = {"beats_model": ["model"], "pct_over_reference": ["pct"], "threshold": ["op", "value"],
+            "check": ["function"], "manual": ["text"]}
+V1_ON = ("cv", "test")
+LOWER_IS_BETTER = {"rmse", "mae", "mape", "wape", "log_loss", "brier"}
+
+
+def v1_problems(criteria):
+    """Problems with the structure of v1_criteria, in plain sentences."""
+    if criteria in (None, []):
+        return []
+    if not isinstance(criteria, list):
+        return ["must be a list of criteria."]
+    out, ids = [], set()
+    for i, c in enumerate(criteria):
+        if not isinstance(c, dict):
+            out.append(f"item {i} is not a mapping.")
+            continue
+        cid, kind = c.get("id") or f"item {i}", c.get("kind")
+        if kind not in V1_KINDS:
+            out.append(f"{cid}: kind {kind!r} is not one of {', '.join(V1_KINDS)}.")
+            continue
+        if criterion_on(c) not in V1_ON:
+            out.append(f"{cid}: on must be cv or test.")
+        missing = [k for k in V1_KINDS[kind] if c.get(k) in (None, "")]
+        if missing:
+            out.append(f"{cid}: {kind} needs " + ", ".join(missing) + ".")
+        if kind == "threshold" and c.get("op") not in (None, "<", "<=", ">", ">="):
+            out.append(f"{cid}: op must be <, <=, > or >=.")
+        if cid in ids:
+            out.append(f"{cid}: the id is used twice.")
+        ids.add(cid)
+    return out
+
+
+def _better(a, b, lower, margin=0.0):
+    return (a <= b - margin) if lower else (a >= b + margin)
+
+
+def v1_evaluate(spec, on, scores, champion, reference=None, checks=None, primary=None):
+    """Apply the V1 criteria judged on `on` (cv or test).
+
+    scores: {model or baseline name: {metric label: value}}, with the primary metric (training.primary_label, such
+    as mape or "recall at 500 per week") for every model.
+    checks: {function name: (passed or None, detail)}, already computed for the check criteria.
+    Returns {"on", "status", "criteria": [{id, kind, status, detail}]}. status is met, not_met, incomplete (a
+    criterion could not be judged), needs_human (a manual criterion), or not_set (no criteria for this on). It is
+    never not_met because of missing information."""
+    tr, bl = (spec or {}).get("training") or {}, (spec or {}).get("baseline") or {}
+    primary = primary or tr.get("primary_label") or bl.get("primary_label") or ""
+    lower = primary in LOWER_IS_BETTER
+    reference = reference or ((bl.get("reference") or {}).get("name"))
+    crit = [c for c in (((spec or {}).get("framing") or {}).get("success") or {}).get("v1_criteria") or []
+            if isinstance(c, dict) and criterion_on(c) == on]
+    mine = (scores or {}).get(champion) or {}
+    out = []
+    for c in crit:
+        cid, kind = c.get("id") or c.get("kind"), c.get("kind")
+        status, detail = "unavailable", ""
+        if kind == "beats_model":
+            other = (scores or {}).get(c.get("model")) or {}
+            a, b, m = mine.get(primary), other.get(primary), float(c.get("margin") or 0)
+            if a is None or b is None:
+                detail = f"No {on} {primary} for {'the champion' if a is None else c.get('model')}."
+            else:
+                status = "pass" if _better(a, b, lower, m) else "fail"
+                detail = f"{champion} {a:.4f} against {c.get('model')} {b:.4f}" + (f" (margin {m:g})" if m else "") + "."
+        elif kind == "pct_over_reference":
+            a, b = mine.get(primary), ((scores or {}).get(reference) or {}).get(primary)
+            if a is None or b in (None, 0):
+                detail = f"No {on} {primary} for the champion or the reference {reference}."
+            else:
+                gain = (b - a) / abs(b) * 100 if lower else (a - b) / abs(b) * 100
+                status = "pass" if gain >= float(c["pct"]) else "fail"
+                detail = f"{gain:+.1f}% against {reference}, needs {float(c['pct']):g}%."
+        elif kind == "threshold":
+            key = c.get("metric") or primary
+            a = mine.get(key)
+            if a is None:
+                detail = f"No {on} {key} for the champion."
+            else:
+                v = float(c["value"])
+                ok = {"<": a < v, "<=": a <= v, ">": a > v, ">=": a >= v}[c["op"]]
+                status = "pass" if ok else "fail"
+                detail = f"{key} {a:.4f} {c['op']} {v:g}."
+        elif kind == "check":
+            res = (checks or {}).get(c.get("function"))
+            if res is None:
+                detail = f"The check {c.get('function')} was not run."
+            else:
+                passed, detail = res
+                status = "unavailable" if passed is None else ("pass" if passed else "fail")
+        elif kind == "manual":
+            status, detail = "manual", str(c.get("text") or "")
+        out.append({"id": cid, "kind": kind, "status": status, "detail": detail})
+    if not out:
+        overall = "not_set"
+    elif any(r["status"] == "fail" for r in out):
+        overall = "not_met"
+    elif any(r["status"] == "unavailable" for r in out):
+        overall = "incomplete"
+    elif any(r["status"] == "manual" for r in out):
+        overall = "needs_human"
+    else:
+        overall = "met"
+    return {"on": on, "status": overall, "criteria": out}
+
+
+def v1_summary(result):
+    """One line for a printout or a report."""
+    if not result or result.get("status") == "not_set":
+        return "no V1 criteria for these scores; compare the V1 bar by hand"
+    parts = [f"{r['id']} {r['status']}" for r in result["criteria"]]
+    return f"{result['status']} on {result['on']} (" + "; ".join(parts) + ")"
+
+
+# ---------------------------------------------------------------- the iteration bar
+
+# iterations.bar: when a new champion (V2, V3, ...) really beats the champion carried forward from the version
+# before, judged on the same CV folds. min_fold_win_share: the new champion must win on more than this share of
+# the folds. spread_multiple: its mean improvement must be larger than this many standard deviations of the per
+# fold differences. min_folds: fewer paired folds than this cannot be judged. max_iterations is the most rounds of
+# iterating without a person; it is recorded here for the agent that drives the workflow.
+ITERATION_BAR_DEFAULTS = {"min_fold_win_share": 0.5, "spread_multiple": 1.0, "min_folds": 3, "max_iterations": 3}
+
+# Primary metrics where a lower score is better. model_core.HIGHER_IS_BETTER is the full list, where it is installed.
+LOWER_IS_BETTER = ("rmse", "mae", "mape", "wape", "log_loss", "brier")
+
+
+def lower_is_better(training):
+    """True when the training section's primary metric is better when lower."""
+    import importlib.util
+    key = str((training or {}).get("primary_label") or "").split("@")[0]
+    if importlib.util.find_spec("model_core"):
+        import model_core
+        return model_core.HIGHER_IS_BETTER.get(key) is False
+    return key in LOWER_IS_BETTER
+
+
+def iteration_bar(spec):
+    """The project's iteration bar, with the defaults for anything not set."""
+    return {**ITERATION_BAR_DEFAULTS, **(((spec or {}).get("iterations") or {}).get("bar") or {})}
+
+
+def iteration_bar_evaluate(new_folds, old_folds, lower_is_better, bar=None):
+    """Apply the iteration bar to per fold CV scores of the new champion and the carried old one, in fold order.
+    Returns {"status": pass, fail, or incomplete, "wins", "folds", "mean_diff", "spread", "detail"}. mean_diff is
+    the mean improvement (positive is better, whatever the metric's direction). It is never fail because of missing
+    information."""
+    bar = {**ITERATION_BAR_DEFAULTS, **(bar or {})}
+    new, old = list(new_folds or []), list(old_folds or [])
+    out = {"status": "incomplete", "wins": None, "folds": min(len(new), len(old)), "mean_diff": None,
+           "spread": None, "detail": ""}
+    if not new or not old:
+        out["detail"] = "Per fold scores are missing for " + ("the new champion" if not new else "the carried model") + "."
+        return out
+    if len(new) != len(old):
+        out["detail"] = f"The two models were scored on different folds ({len(new)} against {len(old)})."
+        return out
+    diffs = [(o - n) if lower_is_better else (n - o) for n, o in zip(new, old)]
+    k = len(diffs)
+    mean = sum(diffs) / k
+    spread = (sum((d - mean) ** 2 for d in diffs) / (k - 1)) ** 0.5 if k > 1 else 0.0
+    wins = sum(1 for d in diffs if d > 0)
+    out.update(wins=wins, mean_diff=mean, spread=spread)
+    if k < int(bar["min_folds"]):
+        out["detail"] = f"Only {k} paired folds; the bar needs at least {int(bar['min_folds'])}."
+        return out
+    win_ok = wins / k > float(bar["min_fold_win_share"])
+    spread_ok = mean > float(bar["spread_multiple"]) * spread
+    out["status"] = "pass" if (win_ok and spread_ok) else "fail"
+    reasons = [f"wins on {wins} of {k} folds" + ("" if win_ok else f", needs more than {float(bar['min_fold_win_share']):.0%}"),
+               f"mean improvement {mean:.4g} against a spread of {spread:.4g}"
+               + ("" if spread_ok else f", needs more than {float(bar['spread_multiple']):g} times the spread")]
+    out["detail"] = "The new champion " + "; ".join(reasons) + "."
+    return out
+
+
+# Words in a V1 bar or a decision that name a kind of model.
+MODEL_WORDS = {
+    "logistic": ("logistic",), "linear regression": ("ridge", "linear"), "ridge": ("ridge",), "lasso": ("lasso",),
+    "decision tree": ("tree",), "random forest": ("forest",), "gradient boost": ("gbm",), "xgboost": ("gbm",),
+    "lightgbm": ("gbm",), "catboost": ("gbm",), "neural": ("neural",),
+}
+
+
+def primary_metric(spec):
+    """The metric the models are judged on: the framing's primary metric, else the key the baseline and training
+    used (older projects set it there only). None when no stage names one."""
+    return (((spec.get("framing") or {}).get("success") or {}).get("primary_metric")
+            or (((spec.get("baseline") or {}).get("metrics") or {}).get("primary") or {}).get("key")
+            or (spec.get("training") or {}).get("primary_label"))
+
+
+def evaluation_decision(spec):
+    """The user's latest go, iterate, or no go decision on the evaluation, from the decisions list (the evaluation
+    section's own decision field is always null). Returns {"outcome": go | iterate | no_go | None, "decision",
+    "reason", "date"}, or None when no decision has been recorded."""
+    found = [d for d in spec.get("decisions") or [] if isinstance(d, dict) and d.get("stage") == "evaluation"
+             and not d.get("superseded_by")]
+    if not found:
+        return None
+    d = found[-1]
+
+    def read(text):
+        text = str(text or "").lower()
+        return ("no_go" if re.search(r"\bno[ -]?go\b|\bdo not (ship|deploy)\b|\bdon't (ship|deploy)\b", text) else
+                "iterate" if re.search(r"^\W*iterat|\biterate\b(?! later)", text) else
+                "go" if re.search(r"\bgo\b|\bship\b|\bpromote\b|\bdeploy\b", text) else None)
+
+    outcome = read(d.get("decision")) or read(d.get("reason"))
+    return {"outcome": outcome, "decision": d.get("decision"), "reason": d.get("reason"), "date": d.get("date")}
+
+
+def consistency_checks(spec):
+    """Settings that disagree between stages, found by fixed rules. Returns a list of
+    {"check", "detail", "where": [spec fields]}. Notes in free text are read by the ml-reconcile-notes skill."""
+    out = []
+    fr, data, eda = spec.get("framing") or {}, spec.get("data") or {}, spec.get("eda") or {}
+    sp, fe, bl, bus = (spec.get(k) or {} for k in ("split", "features", "baseline", "business"))
+    tgt, pt, success = fr.get("target") or {}, fr.get("prediction_time") or {}, fr.get("success") or {}
+
+    def add(check, detail, *where):
+        out.append({"check": check, "detail": detail, "where": list(where)})
+
+    # The same setting in several stages
+    targets = {"framing.target.name": tgt.get("name") if tgt.get("exists_in_data") is not False else None,
+               "eda.target.column": (eda.get("target") or {}).get("column"), "split.target": sp.get("target"),
+               "features.config.target": (fe.get("config") or {}).get("target")}
+    seen = {k: v for k, v in targets.items() if v}
+    if len(set(seen.values())) > 1:
+        add("target", "The target differs between stages: " + ", ".join(f"{k} is {v}" for k, v in seen.items()) + ".", *seen)
+    dates = {"framing.prediction_time.column": pt.get("column"), "data.date_col": data.get("date_col"),
+             "split.date_col": sp.get("date_col"), "features.config.date_col": (fe.get("config") or {}).get("date_col")}
+    seen = {k: v for k, v in dates.items() if v}
+    if len(set(seen.values())) > 1:
+        add("date column", "The date column differs between stages: " + ", ".join(f"{k} is {v}" for k, v in seen.items()) + ".", *seen)
+    ents = fr.get("entity_id_cols") or []
+    if sp.get("strategy") == "group" and sp.get("group_col") and ents and sp["group_col"] not in ents:
+        add("entity", f"The split groups by {sp['group_col']}, but the framing's entity is {', '.join(ents)}.",
+            "split.group_col", "framing.entity_id_cols")
+
+    # Columns excluded in the framing but used as features
+    excluded = {e.get("column") for e in data.get("excluded_cols") or [] if isinstance(e, dict)}
+    used = {i.get("name") for i in fe.get("inputs") or []} | {i.get("source") for i in fe.get("inputs") or []}
+    clash = sorted(c for c in excluded & used if c)
+    if clash:
+        add("excluded column used", f"Excluded in the framing but used by the features: {', '.join(clash)}.",
+            "data.excluded_cols", "features.inputs")
+
+    # The primary metric
+    if bl.get("metrics") and success.get("primary_metric"):
+        fm, _ = parse_metric(success["primary_metric"], sp.get("date_col"))
+        bm = (bl["metrics"] or {}).get("primary") or {}
+        if fm.get("key") and bm.get("key") and fm["key"] != bm.get("key"):
+            add("primary metric", f"The framing's primary metric is {fm['key']} ({success['primary_metric']}), but the "
+                "baseline uses " + str(bm.get("key")) + ".", "framing.success.primary_metric", "baseline.metrics")
+        elif fm.get("k") and bm.get("k") and fm["k"] != bm["k"]:
+            notes = " ".join(map(str, (spec.get("assumptions") or []) + [d.get("decision", "") + " " + str(d.get("reason", ""))
+                                                                       for d in spec.get("decisions") or [] if isinstance(d, dict)]))
+            if not (str(fm["k"]) in notes and str(bm["k"]) in notes):
+                add("metric k", f"The framing measures the top {fm['k']:,}, the baseline the top {bm['k']:,}, and no "
+                    "assumption or decision says why.", "framing.success.primary_metric", "baseline.metrics")
+
+    # A V1 bar or business intent that names a model that is not built
+    if bl.get("models"):
+        built = {str(m.get("type")) for m in bl["models"]} | {str(m.get("name")).lower() for m in bl["models"]}
+        for field, text in (("framing.success.v1_bar", success.get("v1_bar")), ("business.v1_bar_intent", bus.get("v1_bar_intent"))):
+            low = str(text or "").lower()
+            if "baseline" not in low:
+                continue
+            for word, types in MODEL_WORDS.items():
+                if word in low and not any(t in built for t in types):
+                    add("V1 bar", f"{field} says {text!r}, but there is no {word} baseline (the baselines are "
+                        + ", ".join(m.get("name") for m in bl["models"]) + ").", field, "baseline.models")
+        ref = (bl.get("reference") or {}).get("name")
+        if ref and ref not in {m.get("name") for m in bl["models"]}:
+            add("reference", f"The baseline reference {ref} is not one of the baselines.", "baseline.reference")
+
+    # V1 criteria that name a model or baseline that was never built
+    known = {m.get("name") for m in (bl.get("models") or [])} | {m.get("name") for m in ((spec.get("training") or {}).get("models") or [])}
+    if spec.get("training"):
+        for c in success.get("v1_criteria") or []:
+            if isinstance(c, dict) and c.get("kind") == "beats_model" and c.get("model") not in known:
+                add("V1 criteria", f"V1 criterion {c.get('id')} compares with {c.get('model')}, which is not a built "
+                    "model or baseline (" + ", ".join(sorted(n for n in known if n)) + ").",
+                    "framing.success.v1_criteria", "training.models")
+
+    # Time settings
+    if sp.get("strategy") == "time" and fr.get("task_type") != "forecasting":
+        need = max(days_in(tgt.get("outcome_window")) or 0, days_in(tgt.get("label_delay")) or 0)
+        if need and (sp.get("gap_days") or 0) < need:
+            add("gap", f"The split's gap is {sp.get('gap_days') or 0} days, shorter than the outcome window or label "
+                f"delay ({need:g} days).", "split.gap_days", "framing.target")
+    horizon = days_in(pt.get("horizon"))
+    if fr.get("task_type") == "forecasting" and horizon and fe.get("config"):
+        if (fe["config"].get("min_shift_days") or 0) < horizon:
+            add("horizon", f"The features allow lags of {fe['config'].get('min_shift_days') or 0} days, shorter than the "
+                f"{horizon:g} day horizon.", "features.config.min_shift_days", "framing.prediction_time.horizon")
+
+    # Business conclusion against later work
+    if bus.get("ml_needed") == "no" and any(spec.get(s) for s in ("split", "features", "baseline", "training")):
+        add("ML needed", "The business framing concluded ML is not needed, but modelling stages have run.",
+            "business.ml_needed")
+
+    # Iterations kept although the new champion did not pass the iteration bar
+    for e in ((spec.get("iterations") or {}).get("entries") or []):
+        if isinstance(e, dict) and e.get("outcome") == "kept" and (e.get("bar_result") or {}).get("status") == "fail":
+            why = [d for d in spec.get("decisions") or [] if isinstance(d, dict)
+                   and f"iteration {e.get('id')}" in str(d.get("decision") or "").lower()
+                   and "bar" in str(d.get("decision") or "").lower()]
+            if not why:
+                add("iteration bar", f"Iteration {e.get('id')} was kept, but its new champion failed the iteration bar "
+                    "and no decision says why it was kept anyway.", f"iterations.entries.{e.get('id')}")
+
+    # A framing confirmed while the autopilot's checkpoint for it is still open: only the person's review at the
+    # checkpoint may confirm it
+    for c in open_checkpoints(spec):
+        sec = {"business": "business", "framing": "framing"}.get(c.get("kind"))
+        if sec and ((spec.get(sec) or {}).get("status")) == "confirmed":
+            add("checkpoint", f"The {sec} section is confirmed, but the autopilot checkpoint for it is still open, so "
+                "nobody has reviewed the drafts yet.", f"autopilot.checkpoints.{c.get('kind')}")
+
+    # The system design against the stages it was drafted from
+    sysd = spec.get("system") or {}
+    if sysd:
+        comps = sysd.get("components") or {}
+        champ = ((spec.get("training") or {}).get("champion") or {}).get("name")
+        if sysd.get("champion") and champ and sysd["champion"] != champ:
+            add("system champion", f"The system design was drafted for the champion {sysd['champion']}, but the "
+                f"champion is now {champ}. Rerun ml-system-design for the parts that depend on it.",
+                "system.champion", "training.champion.name")
+        gate = ((comps.get("registry") or {}).get("settings") or {}).get("gate") or {}
+        primary = primary_metric(spec)
+        if gate.get("metric") and primary:
+            gk = parse_metric(gate["metric"])[0].get("key")
+            fk = parse_metric(primary)[0].get("key")
+            if gk and fk and gk != fk:
+                add("gate metric", f"The champion/challenger gate compares {gate['metric']}, but the primary metric is "
+                    f"{primary}.", "system.components.registry.settings.gate.metric", "framing.success.primary_metric")
+        served = ((comps.get("features") or {}).get("settings") or {}).get("served_inputs")
+        if served is not None and fe.get("inputs"):
+            missing = sorted({i.get("name") for i in fe["inputs"] if isinstance(i, dict)} - set(served or []))
+            if missing:
+                add("served inputs", "The system design does not say how these model inputs are computed at "
+                    "serving time: " + ", ".join(missing[:10]) + ("." if len(missing) <= 10 else ", and more."),
+                    "system.components.features.settings.served_inputs", "features.inputs")
+
+    # Open questions for stages that are finished
+    order = [s[0] for s in STEPS]
+    nxt = next_step(spec)[0]
+    nxt_i = order.index(nxt) if nxt in order else len(order)
+    for q in spec.get("open_questions") or []:
+        if isinstance(q, dict) and q.get("status") == "open" and q.get("stage") in order and order.index(q["stage"]) < nxt_i:
+            add("open question", f"{q.get('id')} is still open, but its stage ({q['stage']}) is finished: {q.get('question')}",
+                f"open_questions.{q.get('id')}")
+    return out
+
+
+# ---------------------------------------------------------------- packages
+
+def missing_packages(packages):
+    """The packages from the list that this Python cannot import, by package name (scikit-learn, not sklearn)."""
+    import importlib.util
+    return [p for p in packages if importlib.util.find_spec(IMPORT_NAMES.get(p, p.replace("-", "_"))) is None]
+
+
+# ---------------------------------------------------------------- CLI
+
+def _columns(path, sheet=None):
+    import pandas as pd
+    ext = path.lower()
+    if ext.endswith((".parquet", ".pq")):
+        try:
+            import pyarrow.parquet as pq
+            sch = pq.read_schema(path)
+            print(f"{pq.ParquetFile(path).metadata.num_rows:,} rows and {len(sch.names):,} columns")
+            for f in sch:
+                print(f"  {f.name:40} {f.type}")
+            return
+        except ImportError:
+            df = pd.read_parquet(path)
+    elif ext.endswith((".xlsx", ".xlsm", ".xls")):
+        df = pd.read_excel(path, sheet_name=sheet or 0, nrows=2000)
+    elif ext.endswith(".tsv"):
+        df = pd.read_csv(path, sep="\t", nrows=2000, low_memory=False)
+    elif ext.endswith(".jsonl"):
+        df = pd.read_json(path, lines=True, nrows=2000)
+    elif ext.endswith(".json"):
+        df = pd.read_json(path)
+    elif ext.endswith(".feather"):
+        df = pd.read_feather(path)
+    else:
+        df = pd.read_csv(path, nrows=2000, low_memory=False)
+    print(f"{df.shape[1]:,} columns (types read from the first {len(df):,} rows)")
+    for c in df.columns:
+        print(f"  {str(c)[:40]:40} {df[c].dtype}")
+
+
+def _print_status(spec, path):
+    root = os.path.dirname(path)
+    print(f"Spec: {path}")
+    pr = spec.get("project") or {}
+    print(f"Project: {pr.get('name')}" + (f": {pr.get('description')}" if pr.get("description") else ""))
+    print("Steps:")
+    for i, (step, skill, how, what) in enumerate(STEPS, 1):
+        label = "done" if step_done(spec, step) else "not started"
+        if step == "discovery" and label == "done" and not spec.get("discovery"):
+            label = "skipped"
+        elif step == "business_anchors" and label == "not started" and (spec.get("business") or {}).get("mode"):
+            label = "draft"
+        elif step in ("business", "framing") and label == "not started" and \
+                ((spec.get(step) or {}).get("status")) == "draft":
+            label = "draft"
+        print(f"  {i:2}. {step:16} {label:12} {skill}" + (f" ({how})" if how else "") + f": {what}")
+    oq = [q for q in spec.get("open_questions") or [] if isinstance(q, dict) and q.get("status") == "open"]
+    print(f"Open questions: {len(oq)}")
+    for q in oq:
+        print(f"  {q.get('id')} [{q.get('stage')}] {q.get('question')}")
+    ap = spec.get("autopilot") or {}
+    if ap.get("settings"):
+        cps = open_checkpoints(spec)
+        print("Autopilot: " + (f"stopped at the {cps[-1]['kind']} checkpoint ({cps[-1].get('file')}); resume with "
+                               "/ml-autopilot." if cps else
+                               f"stopped iterating: {(ap.get('stopped') or {}).get('reason')}" if ap.get("stopped")
+                               else "running; /ml-autopilot shows the next action."))
+    ws = workspace_info(root)
+    if ws:
+        what = f"experiment {ws.get('experiment')}" if ws["kind"] == "experiment" else f"iteration {ws.get('version')}"
+        print(f"Workspace: {what} on branch {ws.get('branch')}, a copy of {ws.get('main_root')}.")
+    step, skill, how = next_step(spec)
+    print("Next: " + (f"run the {skill} skill" + (f", {how}" if how else "") + f" ({step})." if step
+                      else "every step is done."))
+    py = project_python(root)
+    print(f"Project Python: {py or 'none (.venv missing, run ml-project-setup)'}")
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("command", choices=["root", "path", "paths", "init", "show", "status", "validate", "merge",
+                                        "fill", "columns", "notebook-name", "next", "gate", "need"])
+    ap.add_argument("args", nargs="*")
+    ap.add_argument("--spec", help=f"Spec path (default: {SPEC_NAME} at the project root)")
+    ap.add_argument("--name", help="Project name for init")
+    ap.add_argument("--description", help="One sentence project description for init")
+    ap.add_argument("--section", help="Section to print with show")
+    ap.add_argument("--suffix", help="Suffix for notebook-name, such as a dataset name")
+    ap.add_argument("--skill", default="manual", help="Skill name recorded in history")
+    ap.add_argument("--sheet")
+    a = ap.parse_args()
+
+    if a.command == "columns":
+        if not a.args:
+            ap.error("columns needs a data file path")
+        _columns(a.args[0], a.sheet)
+        return
+    if a.command == "notebook-name":
+        if not a.args:
+            ap.error("notebook-name needs a stage, one of: " + ", ".join(STAGE_NUMBER))
+        print(notebook_name(a.args[0], a.suffix))
+        return
+    if a.command == "need":
+        if not a.args:
+            ap.error("need takes one or more package names, such as scikit-learn")
+        missing = missing_packages(a.args)
+        if missing:
+            print(f"Not installed in {sys.executable}: {', '.join(missing)}. Ask the user, then run: "
+                  f"uv add {' '.join(missing)}")
+            sys.exit(1)
+        print("Installed: " + ", ".join(a.args))
+        return
+    if a.command == "root":
+        root, why = find_project_root()
+        print(f"{root} ({why})" if root else f"No project root found: {why}. Run the ml-project-setup skill.")
+        return
+
+    path = spec_path(a.spec)
+    exists = os.path.exists(path)
+
+    if a.command == "path":
+        print(path if exists else f"No spec yet. It would be created at {path}")
+        return
+    if a.command == "init":
+        if exists:
+            sys.exit(f"A spec already exists at {path}. Use merge or fill to change it.")
+        spec = template(a.name or os.path.basename(os.path.dirname(path)), a.description)
+        log(spec, a.skill if a.skill != "manual" else "ml_common", "created spec")
+        save(path, spec)
+        print(f"Created {path}" + ("" if yaml else " (as JSON, because PyYAML is not installed in this Python)"))
+        return
+    if not exists:
+        sys.exit(f"No spec at {path}. Create one with: {os.path.basename(sys.executable)} "
+                 f"{os.path.abspath(__file__)} init --name <project>")
+    spec = migrate(load(path))
+
+    if a.command == "next":
+        step, skill, how = next_step(spec)
+        print(f"{step} {skill}" + (f" ({how})" if how else "") if step else "done")
+        return
+    if a.command == "gate":
+        blockers = modelling_blockers(spec)
+        print("Ready for modelling." if not blockers else "Not ready for modelling: " + "; ".join(blockers) + ".")
+        sys.exit(1 if blockers else 0)
+    if a.command == "paths":
+        root = os.path.dirname(path)
+        for k, v in project_paths(spec, root).items():
+            print(f"{k:15} {relpath(v, root):25} {'exists' if os.path.isdir(v) else 'missing'}")
+    elif a.command == "show":
+        part = spec.get(a.section) if a.section else spec
+        if a.section and part is None:
+            sys.exit(f"The spec has no section '{a.section}'.")
+        sys.stdout.write(dump_text(part))
+    elif a.command == "status":
+        _print_status(spec, path)
+    elif a.command == "validate":
+        errors, req, rec = validate(spec)
+        print(f"Spec: {path}")
+        print("Structure: " + ("no problems" if not errors else f"{len(errors)} problem(s)"))
+        for e in errors:
+            print(f"  ERROR {e}")
+        print("Required fields still empty: " + (", ".join(req) if req else "none"))
+        print("Recommended fields still empty: " + (", ".join(rec) if rec else "none"))
+        sys.exit(1 if errors else 0)
+    elif a.command in ("merge", "fill"):
+        if len(a.args) != 2:
+            ap.error(f"{a.command} needs a section name (or root) and a YAML or JSON file")
+        section, src = a.args
+        new = load(src)
+        spec = load_or_create(path)[0]
+        fn = deep_merge if a.command == "merge" else fill_missing
+        if section == "root":
+            spec = fn(spec, new)
+        else:
+            spec[section] = fn(spec.get(section) or {}, new)
+        log(spec, a.skill, f"{a.command} {section} from {os.path.basename(src)}")
+        save(path, spec)
+        errors, req, _ = validate(spec)
+        print(f"Updated {path}")
+        for e in errors:
+            print(f"  ERROR {e}")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except BrokenPipeError:  # output piped into head or similar
+        sys.stderr.close()

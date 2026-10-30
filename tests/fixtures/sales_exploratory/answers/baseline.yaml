@@ -1,0 +1,28 @@
+metrics:
+  primary:
+    key: wape
+  secondary:
+  - mae
+  - rmse
+  - bias
+baselines:
+- name: naive
+  kind: non_ml
+  type: column
+  params:
+    column: sales_lag_28d
+  reason: 'Tomorrow looks like 28 days ago: the value 28 days earlier (the horizon is 28 days).'
+- name: moving_average
+  kind: non_ml
+  type: column
+  params:
+    column: sales_roll_28d_mean_shift_28d
+  reason: The average of the last 28 days, ending 28 days before the forecast.
+reference: null
+reasoning: {}
+risks: []
+assumptions: []
+open_questions: []
+decisions: []
+resolved_questions: []
+

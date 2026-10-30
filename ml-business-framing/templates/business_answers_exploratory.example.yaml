@@ -1,0 +1,42 @@
+# Example answers file for an exploratory project: make_notebook.py <this file>
+# It builds notebooks/01_business_framing.ipynb. Use exactly these keys, and null for anything not known yet.
+# Before data discovery, only mode, learning_question, and answer_actions are filled in, with status: draft.
+status: confirmed
+business:
+  mode: exploratory
+  learning_question: Can weekly media spend explain bike sales well enough to compare the channels?
+  answer_actions:
+    - answer: Yes, the model beats the best simple baseline by the agreed margin.
+      action: Build the budget reallocation model and test a reallocation next quarter.
+    - answer: No, it does no better than the baseline.
+      action: Stop, and improve how media spend is tracked by channel before trying again.
+  users: Marketing analytics team
+  outcome: Weekly bike sales, explained by media spend by channel and by season.
+  output_use: quantity
+  v1_bar_intent: Beat the best simple baseline (seasonal naive) by at least 10% on CV, then build the budget model.
+  ml_needed: "unsure"   # quote it: yes, no, or unsure
+  ml_needed_reason: That is what the experiment should find out.
+  constraints:
+    latency: Not a concern, a one off analysis
+    interpretability: Each channel's effect must be readable, and never negative
+    fairness: null
+    data_access: Weekly sales and media spend only
+    other: []
+  out_of_scope:
+    - Choosing creative or targeting within a channel
+# One short paragraph per section, in plain sentences: why the answer is what it is. Shown above each decision cell.
+reasoning:
+  mode: There is no budget model today and no KPI the team is accountable for yet, so this is an experiment.
+  learning: The answer decides whether to invest in a budget model at all, and each answer leads to a different action.
+  outcome: Weekly sales is the only outcome in the data that media can plausibly move.
+  output_use: A predicted quantity, so the metric will be an error measure such as MAPE.
+  ml_needed: A simple baseline may already explain most of the weekly pattern, which is part of what is being tested.
+risks:
+  - problem: Both answers first led to "build the model", so the experiment could not change anything.
+    resolution: The "no" answer now leads to fixing spend tracking first.
+assumptions:
+  - Media spend by channel is recorded for every week in the data.
+open_questions: []
+decisions:
+  - decision: V1 is compared with the best simple baseline, not a current approach.
+    reason: The project is exploratory and there is no current approach.

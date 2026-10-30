@@ -1,0 +1,46 @@
+# Example answers file for: make_notebook.py <this file>
+# It builds notebooks/01_business_framing.ipynb. Use exactly these keys, and null for anything not known yet.
+status: confirmed
+business:
+  mode: standard   # standard or exploratory; see business_answers_exploratory.example.yaml
+  business_goal: Reduce revenue lost to customers who stop ordering.
+  business_kpi: Retained revenue from contacted customers
+  decision_supported: The retention team sends an offer to the customers most likely to lapse each week.
+  users: Retention marketing team
+  capacity: 500 offers a week
+  current_approach: A rule flags customers with no order in the last 30 days.
+  outcome: Customers who are about to stop ordering.
+  output_use: ranked_list
+  v1_bar_intent: Finds more of the customers who lapse than the 30 day rule, at the same 500 offers a week.
+  ml_needed: "yes"   # quote it: yes, no, or unsure
+  ml_needed_reason: The 30 day rule misses customers whose ordering slows down gradually, and offers have a real cost.
+  constraints:
+    latency: Not a concern, weekly batch scoring
+    interpretability: Top reasons for each score should be available to the team
+    fairness: No protected attributes as features
+    data_access: Order and account tables only
+    other: []
+  out_of_scope:
+    - Choosing which offer to send
+# One short paragraph per section, in plain sentences: why the answer is what it is. Shown above each decision cell.
+reasoning:
+  goal: Lapsed customers are the largest source of lost revenue, and the team already has budget for retention offers.
+  decision: The team can contact 500 customers a week, so the model only has to rank the top of the list well.
+  current_approach: The 30 day rule is simple and explainable, which is why V1 is measured against it.
+  outcome: Kept in business terms on purpose. The exact rule and window depend on the order history in the data.
+  output_use: A ranked list for a fixed weekly capacity, so the metric will be recall or precision at 500.
+  ml_needed: The rule catches sudden stops but not gradual slowdowns, which a model can learn from order history.
+  constraints: Scores are produced once a week, and the team wants a reason for each customer they contact.
+risks:
+  - problem: The first goal given was "build a churn model", which is the model, not a business outcome.
+    resolution: Restated as reducing revenue lost to lapsed customers, measured by retained revenue.
+  - problem: Offers may stop customers from lapsing, which changes future labels.
+    resolution: Open question for the evaluation stage, about keeping a holdout group.
+assumptions:
+  - The weekly offer capacity stays at about 500.
+open_questions:
+  - question: Can a random holdout group be kept out of the offers, so future labels are not biased?
+    stage: evaluation
+decisions:
+  - decision: V1 is measured against the 30 day rule at the same weekly volume.
+    reason: It is the current approach, and the team understands it.
