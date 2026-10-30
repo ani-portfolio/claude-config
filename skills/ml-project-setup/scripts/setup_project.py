@@ -169,7 +169,7 @@ decision: read it before starting any modelling work, and never contradict it wi
 * Each skill writes only its own section of the spec. Open questions in the spec name the stage that needs them.
 * Runs of the modelling stages (split onwards, and reviews) are logged to MLflow, in this project's experiment on
   the shared server (`tracking` in `ml_spec.yaml` has the address and the link). The spec decides; MLflow records.
-  Start the server with `python3 ~/Projects/claude-skills/tools/mlflow_server.py start` when it is not running.
+  Start the server with `python3 ~/Projects/claude-config/skills/tools/mlflow_server.py start` when it is not running.
 """
 
 
@@ -853,7 +853,7 @@ def step_tracking(root, rep):
 
 
 def skills_tools():
-    """The tools folder of the claude-skills folder this skill lives in (through the ~/.claude/skills link)."""
+    """The tools folder of the skills folder this skill lives in (through the ~/.claude/skills link)."""
     p = Path(os.path.realpath(__file__)).parents[2] / "tools"
     return p if p.is_dir() else None
 

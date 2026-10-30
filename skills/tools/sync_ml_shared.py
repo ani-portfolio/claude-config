@@ -14,7 +14,7 @@ and the stages that fit models (see MODEL_SKILLS below) also keep:
 and the skills that run work in git worktrees (see WORKSPACE_SKILLS below) also keep:
     scripts/workspace.py        copy of _ml_shared/workspace.py, the worktrees of experiments and iterations
 
-Run from the claude-skills folder:
+Run from the skills folder:
     python3 tools/sync_ml_shared.py          # report copies that differ or are missing (exit 1 if any)
     python3 tools/sync_ml_shared.py --fix    # copy the canonical files into every listed skill
 

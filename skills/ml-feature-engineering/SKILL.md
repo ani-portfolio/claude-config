@@ -16,7 +16,7 @@ The outputs are:
 * `features_train.parquet` and `features_test.parquet` in the processed data folder: the keys, the target, and every input before the learned steps.
 * The `features` section of `ml_spec.yaml`.
 
-This is step 8 of the ML project skills: ml-project-setup, ml-business-framing (anchors only), ml-data-discovery, ml-business-framing (full framing), ml-problem-framing, ml-eda-report, ml-train-test-split, **ml-feature-engineering**, then ml-baseline-model, ml-model-training, and ml-offline-evaluation. Every skill reads `ml_spec.yaml` first and writes only its own section. The shared conventions are in `ML_CONVENTIONS.md` in the claude-skills folder. `reference/feature_rules.md` explains every rule used here.
+This is step 8 of the ML project skills: ml-project-setup, ml-business-framing (anchors only), ml-data-discovery, ml-business-framing (full framing), ml-problem-framing, ml-eda-report, ml-train-test-split, **ml-feature-engineering**, then ml-baseline-model, ml-model-training, and ml-offline-evaluation. Every skill reads `ml_spec.yaml` first and writes only its own section. The shared conventions are in `ML_CONVENTIONS.md` in the skills folder. `reference/feature_rules.md` explains every rule used here.
 
 ## Ground rules
 
@@ -93,4 +93,4 @@ Reply with these parts, in this order:
 
 ## The spec file
 
-`reference/spec_fields.md` describes the `features` section. `scripts/ml_common.py`, `scripts/nb_common.py`, and `scripts/split_core.py` are copies of the canonical files in `claude-skills/_ml_shared/`, kept in sync by `tools/sync_ml_shared.py`. The project code comes from `templates/features.py` and `templates/custom_features.py`.
+`reference/spec_fields.md` describes the `features` section. `scripts/ml_common.py`, `scripts/nb_common.py`, and `scripts/split_core.py` are copies of the canonical files in `skills/_ml_shared/`, kept in sync by `tools/sync_ml_shared.py`. The project code comes from `templates/features.py` and `templates/custom_features.py`.

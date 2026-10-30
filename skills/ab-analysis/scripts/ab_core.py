@@ -4,7 +4,7 @@ variance reduction, multiple testing corrections, balance checks, and heterogene
 Uses numpy, scipy, and pandas only, so it runs in any project set up by ab-project-setup or ml-project-setup. Every
 function returns plain dicts of numbers, so notebooks can show them as tables and write them to the spec.
 
-The canonical copy lives in claude-skills/_ab_shared/ab_core.py, copied into the skills that compute statistics by
+The canonical copy lives in skills/_ab_shared/ab_core.py, copied into the skills that compute statistics by
 tools/sync_ab_shared.py.
 """
 

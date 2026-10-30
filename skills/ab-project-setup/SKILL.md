@@ -8,7 +8,7 @@ allowed-tools: Bash(python3 ${CLAUDE_SKILL_DIR}/scripts/*), Bash(.venv/bin/pytho
 
 Create a project folder with its own Python environment and the shared A/B test spec, and make sure VS Code and Jupyter select that environment every time.
 
-This is the first step of the A/B testing skills: **ab-project-setup**, ab-test-framing, ab-test-design, ab-data-validation, ab-analysis, ab-segment-analysis, and ab-readout. Every step reads `ab_spec.yaml` first and writes only its own section. `/ab-status` shows where a test stands. The shared conventions are in `AB_CONVENTIONS.md` in the claude-skills folder.
+This is the first step of the A/B testing skills: **ab-project-setup**, ab-test-framing, ab-test-design, ab-data-validation, ab-analysis, ab-segment-analysis, and ab-readout. Every step reads `ab_spec.yaml` first and writes only its own section. `/ab-status` shows where a test stands. The shared conventions are in `AB_CONVENTIONS.md` in the skills folder.
 
 ## Ground rules
 
@@ -83,7 +83,7 @@ The script exits with code 1 and a "Problems" list when something needs the user
 * **`.vscode/settings.json` is not valid JSON.** Show the keys the script printed, and offer to add them with the Edit tool.
 * **`.venv` is broken.** Ask, then rerun with `--rebuild-venv`. The old one is moved to `.venv.old-<time>`.
 * **uv is not installed** or **installing failed.** Show the message and the install command.
-* **MLflow tracking not set up yet.** The shared server was not running. This is not an error. Tell the user how to start it (`python3 ~/Projects/claude-skills/tools/mlflow_server.py install-agent`, after `uv tool install mlflow`), then rerun with `--add-tracking`.
+* **MLflow tracking not set up yet.** The shared server was not running. This is not an error. Tell the user how to start it (`python3 ~/Projects/claude-config/skills/tools/mlflow_server.py install-agent`, after `uv tool install mlflow`), then rerun with `--add-tracking`.
 * **ml-project-setup was not found.** Tell the user this skill needs it installed next to it in `~/.claude/skills`.
 
 ## Step 5: Check the spec

@@ -168,12 +168,12 @@ The files in `_ml_shared/` are copied into every skill listed in `_ml_shared/ski
 | `_ml_shared/tracking.py` (MLflow tracking: the address, the project's experiment, and one run per stage notebook) | `scripts/tracking.py` |
 | `_ml_shared/eda_core.py` (the EDA engine) | `scripts/eda_core.py`, only in ml-eda-report and ml-data-discovery (`EDA_SKILLS` in `tools/sync_ml_shared.py`) |
 
-Edit only the canonical files, then run `python3 tools/sync_ml_shared.py --fix` from the claude-skills folder. After editing `nb_common.py`, also run `python3 tools/sync_ab_shared.py --fix`. Without `--fix`, it reports copies that differ and exits with code 1, which makes it usable as a check before committing.
+Edit only the canonical files, then run `python3 tools/sync_ml_shared.py --fix` from the skills folder. After editing `nb_common.py`, also run `python3 tools/sync_ab_shared.py --fix`. Without `--fix`, it reports copies that differ and exits with code 1, which makes it usable as a check before committing.
 
 ## Adding a new skill
 
 1. Copy `_ml-skill-template/` to a folder named after the skill in the workflow table, and fill in the placeholders.
 2. Add the folder name to `_ml_shared/skills.txt`, then run `python3 tools/sync_ml_shared.py --fix`.
 3. Add its section fields to the template in `_ml_shared/ml_common.py` and to `_ml_shared/spec_fields.md`, if it needs more than an empty mapping.
-4. Link it into Claude Code: `ln -s ~/Projects/claude-skills/<skill> ~/.claude/skills/<skill>`.
+4. Link it into Claude Code: `ln -s ~/Projects/claude-config/skills/<skill> ~/.claude/skills/<skill>`.
 5. Test it on a fresh project made with ml-project-setup, after running the earlier stages.

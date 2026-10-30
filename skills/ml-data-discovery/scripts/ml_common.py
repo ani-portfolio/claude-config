@@ -2,9 +2,9 @@
 """Shared code for the ML project skills: project root, folder layout, kernel naming, and the
 shared spec file (ml_spec.yaml).
 
-The canonical copy lives in claude-skills/_ml_shared/ml_common.py. Every ML skill keeps an identical copy
+The canonical copy lives in skills/_ml_shared/ml_common.py. Every ML skill keeps an identical copy
 in its own scripts folder so it works on its own. Edit the canonical copy, then run
-`python3 tools/sync_ml_shared.py` from the claude-skills folder to update the copies.
+`python3 tools/sync_ml_shared.py` from the skills folder to update the copies.
 
 Uses only the standard library. PyYAML is used when installed (the project .venv has it);
 without it the spec is written as JSON, which is also valid YAML.

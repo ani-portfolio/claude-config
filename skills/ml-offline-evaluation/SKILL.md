@@ -15,7 +15,7 @@ The outputs are:
 * `docs/model_card.md`: written from the spec. When the user edited it, the card is kept and `docs/model_card_new.md` is written next to it.
 * The `evaluation` section of `ml_spec.yaml`, including a record of every time the test set was opened.
 
-This is step 11 of the ML project skills: ml-project-setup, ml-business-framing (anchors only), ml-data-discovery, ml-business-framing (full framing), ml-problem-framing, ml-eda-report, ml-train-test-split, ml-feature-engineering, ml-baseline-model, ml-model-training, **ml-offline-evaluation**. Every skill reads `ml_spec.yaml` first and writes only its own section. The shared conventions are in `ML_CONVENTIONS.md` in the claude-skills folder. `reference/evaluation.md` explains every table, chart, and check.
+This is step 11 of the ML project skills: ml-project-setup, ml-business-framing (anchors only), ml-data-discovery, ml-business-framing (full framing), ml-problem-framing, ml-eda-report, ml-train-test-split, ml-feature-engineering, ml-baseline-model, ml-model-training, **ml-offline-evaluation**. Every skill reads `ml_spec.yaml` first and writes only its own section. The shared conventions are in `ML_CONVENTIONS.md` in the skills folder. `reference/evaluation.md` explains every table, chart, and check.
 
 ## Ground rules
 
@@ -86,4 +86,4 @@ When the user states a decision, add it to the `decisions` list in the last deci
 
 ## The spec file
 
-`reference/spec_fields.md` describes the `evaluation` section. `scripts/eval_core.py` holds the evaluation logic (bootstrap, slices, operating point, and the model card). `scripts/ml_common.py`, `scripts/nb_common.py`, `scripts/split_core.py`, and `scripts/model_core.py` are copies of the canonical files in `claude-skills/_ml_shared/`, kept in sync by `tools/sync_ml_shared.py`.
+`reference/spec_fields.md` describes the `evaluation` section. `scripts/eval_core.py` holds the evaluation logic (bootstrap, slices, operating point, and the model card). `scripts/ml_common.py`, `scripts/nb_common.py`, `scripts/split_core.py`, and `scripts/model_core.py` are copies of the canonical files in `skills/_ml_shared/`, kept in sync by `tools/sync_ml_shared.py`.

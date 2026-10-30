@@ -8,7 +8,7 @@ allowed-tools: Bash(python3 ${CLAUDE_SKILL_DIR}/scripts/*), Bash(.venv/bin/pytho
 
 Define exactly what the model predicts, for which unit, at what moment, and how success is measured, using what the business framing decided and what data discovery found. The output is the notebook `notebooks/03_problem_framing.ipynb`. Its markdown cells hold the reasoning, the risks, the assumptions, and the open questions. Its *Decision* cells hold the target, unit of prediction, prediction time, success measures, and excluded columns, which the user can edit. Its check cells test those decisions against the data in short pandas code. Running it writes the `framing` section of the shared spec `ml_spec.yaml` and the `data` settings (date, ID, and excluded columns).
 
-This is step 5 of the ML project skills: ml-project-setup, ml-business-framing (anchors only), ml-data-discovery, ml-business-framing (full framing), **ml-problem-framing**, ml-eda-report, then ml-train-test-split, ml-feature-engineering, ml-baseline-model, ml-model-training, and ml-offline-evaluation. Every skill reads `ml_spec.yaml` first and writes only its own section. The shared conventions are in `ML_CONVENTIONS.md` in the claude-skills folder. A confirmed ML framing, followed by the targeted EDA, is what lets the modelling skills start (`ml_common.py gate`).
+This is step 5 of the ML project skills: ml-project-setup, ml-business-framing (anchors only), ml-data-discovery, ml-business-framing (full framing), **ml-problem-framing**, ml-eda-report, then ml-train-test-split, ml-feature-engineering, ml-baseline-model, ml-model-training, and ml-offline-evaluation. Every skill reads `ml_spec.yaml` first and writes only its own section. The shared conventions are in `ML_CONVENTIONS.md` in the skills folder. A confirmed ML framing, followed by the targeted EDA, is what lets the modelling skills start (`ml_common.py gate`).
 
 ## Ground rules
 
@@ -111,4 +111,4 @@ Reply with these parts, in this order:
 
 ## The spec file
 
-`reference/spec_fields.md` describes every field in `ml_spec.yaml` and the dictionary file. `scripts/ml_common.py` is the only code that should create or restructure the spec, and `scripts/nb_common.py` builds and runs the notebooks. All three are copies of the canonical files in `claude-skills/_ml_shared/`, kept in sync by `tools/sync_ml_shared.py`.
+`reference/spec_fields.md` describes every field in `ml_spec.yaml` and the dictionary file. `scripts/ml_common.py` is the only code that should create or restructure the spec, and `scripts/nb_common.py` builds and runs the notebooks. All three are copies of the canonical files in `skills/_ml_shared/`, kept in sync by `tools/sync_ml_shared.py`.

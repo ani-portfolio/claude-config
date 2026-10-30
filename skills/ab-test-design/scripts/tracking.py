@@ -1,7 +1,7 @@
 """MLflow tracking for the ML project skills.
 
 Every project logs to its own experiment on one shared MLflow server (see tools/mlflow_server.py in the
-claude-skills folder). The spec stays the record of decisions; MLflow records each run of a stage notebook so runs
+skills folder). The spec stays the record of decisions; MLflow records each run of a stage notebook so runs
 can be browsed and compared. Tracking never blocks the work: when MLflow is not installed or the server cannot be
 reached, the notebook prints one line and carries on.
 
@@ -62,7 +62,7 @@ DEFAULT_URI = "http://127.0.0.1:5000"
 ML_STAGES = ("split", "features", "baseline", "training", "evaluation", "review")
 AB_STAGES = ("framing", "design", "validation", "analysis", "segments", "readout")
 LOGGED_STAGES = AB_STAGES if KIND == "ab" else ML_STAGES
-SERVER_HELP = ("Start the shared server with `python3 ~/Projects/claude-skills/tools/mlflow_server.py start` "
+SERVER_HELP = ("Start the shared server with `python3 ~/Projects/claude-config/skills/tools/mlflow_server.py start` "
                "(or install-agent to start it at every login).")
 _FIGURES = []
 _WARNED = set()
@@ -986,7 +986,7 @@ def status_notes(spec, setup_hint):
     uri = tracking_uri(spec)
     if not reachable(uri):
         notes.append(f"The MLflow server at {uri} is not reachable, so new runs are not logged. Start it with "
-                     "`python3 ~/Projects/claude-skills/tools/mlflow_server.py start`.")
+                     "`python3 ~/Projects/claude-config/skills/tools/mlflow_server.py start`.")
     missing = [s for s in done if not (spec.get(s) or {}).get("mlflow")]
     if missing:
         notes.append("No MLflow run is logged for " + ", ".join(missing)

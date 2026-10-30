@@ -19,7 +19,7 @@ in training. Every file written is parquet:
 Later stages call cv_splits(train, spec["split"]) to get the (train, validation) row positions of each fold,
 and load_sets(spec, root) to load the files.
 
-The canonical copy lives in claude-skills/_ml_shared/split_core.py, copied into the modelling skills by
+The canonical copy lives in skills/_ml_shared/split_core.py, copied into the modelling skills by
 tools/sync_ml_shared.py.
 """
 

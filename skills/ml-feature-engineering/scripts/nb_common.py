@@ -9,7 +9,7 @@ spec["notebooks"][stage], with a hash of the decision cells, so the status skill
 edited after it last ran.
 
 The spec library is ab_common (ab_spec.yaml) when it sits next to this file, as in the A/B testing skills, and
-ml_common (ml_spec.yaml) otherwise. The canonical copy lives in claude-skills/_ml_shared/nb_common.py, copied
+ml_common (ml_spec.yaml) otherwise. The canonical copy lives in skills/_ml_shared/nb_common.py, copied
 into each skill by tools/sync_ml_shared.py and tools/sync_ab_shared.py.
 
 Commands:

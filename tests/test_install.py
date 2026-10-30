@@ -68,7 +68,7 @@ def test_fresh_home_links_everything(repo, home):
     assert links_to(claude / "agents" / "helper.md", repo / "agents" / "helper.md")
     assert links_to(claude / "skills" / "ml-one", repo / "skills" / "ml-one")
     assert links_to(claude / "skills" / "grill-me", repo / "skills" / "grill-me")
-    assert links_to(home / "Projects" / "claude-skills", repo / "skills")
+    assert not (home / "Projects" / "claude-skills").exists()
 
 
 def test_only_real_skills_are_linked(repo, home):
@@ -125,17 +125,6 @@ def test_other_folders_in_skills_are_left_alone(repo, home):
     run(repo, home)
     assert (synced / "file").read_text() == "keep\n"
     assert not synced.is_symlink()
-
-
-def test_a_real_claude_skills_folder_is_not_replaced(repo, home):
-    folder = home / "Projects" / "claude-skills"
-    folder.mkdir(parents=True)
-    (folder / "work").write_text("keep\n")
-    result = run(repo, home)
-    assert result.returncode == 0, result.stderr
-    assert (folder / "work").read_text() == "keep\n"
-    assert not folder.is_symlink()
-    assert "claude-skills" in result.stdout
 
 
 def test_check_passes_after_install_and_changes_nothing(repo, home):

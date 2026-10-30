@@ -17,7 +17,7 @@ The outputs are:
 * `review_findings.parquet` in the processed data folder: every finding of every review, with its status.
 * The `review` section of `ml_spec.yaml`, which ml-status reads.
 
-This is a helper skill, not a workflow step. The shared conventions are in `ML_CONVENTIONS.md` in the claude-skills folder.
+This is a helper skill, not a workflow step. The shared conventions are in `ML_CONVENTIONS.md` in the skills folder.
 
 ## Ground rules
 
@@ -105,4 +105,4 @@ This does not launch a new reviewer. The accepted finding stays accepted in late
 
 ## The spec file
 
-`reference/spec_fields.md` describes the `review` section. `scripts/review_core.py` holds the scripted checks and the findings history; add a check there when a stage gains a new way to go wrong. `scripts/ml_common.py`, `scripts/nb_common.py`, `scripts/split_core.py`, and `scripts/model_core.py` are copies of the canonical files in `claude-skills/_ml_shared/`, kept in sync by `tools/sync_ml_shared.py`.
+`reference/spec_fields.md` describes the `review` section. `scripts/review_core.py` holds the scripted checks and the findings history; add a check there when a stage gains a new way to go wrong. `scripts/ml_common.py`, `scripts/nb_common.py`, `scripts/split_core.py`, and `scripts/model_core.py` are copies of the canonical files in `skills/_ml_shared/`, kept in sync by `tools/sync_ml_shared.py`.

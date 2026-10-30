@@ -12,7 +12,7 @@ Find out what the data is and how it comes about, so the ML framing can be built
 * `docs/data_dictionary.yaml`: the data dictionary, written by the notebook.
 * The `discovery` section of `ml_spec.yaml`, the entries in `data.sources`, and grouped open questions, also written by the notebook.
 
-This is step 3 of the ML project skills: ml-project-setup, ml-business-framing (anchors only), **ml-data-discovery**, ml-business-framing (full framing), ml-problem-framing, ml-eda-report, then ml-train-test-split, ml-feature-engineering, ml-baseline-model, ml-model-training, and ml-offline-evaluation. Every skill reads `ml_spec.yaml` first and writes only its own section. The shared conventions are in `ML_CONVENTIONS.md` in the claude-skills folder.
+This is step 3 of the ML project skills: ml-project-setup, ml-business-framing (anchors only), **ml-data-discovery**, ml-business-framing (full framing), ml-problem-framing, ml-eda-report, then ml-train-test-split, ml-feature-engineering, ml-baseline-model, ml-model-training, and ml-offline-evaluation. Every skill reads `ml_spec.yaml` first and writes only its own section. The shared conventions are in `ML_CONVENTIONS.md` in the skills folder.
 
 Data discovery describes the data as it is. It does not pick a target and it does not study which features predict anything: that waits for ml-eda-report, after ml-problem-framing has confirmed the target.
 
@@ -113,4 +113,4 @@ Reply with these parts, in this order. Do not paste the notebook, and do not inc
 
 ## The spec file
 
-`reference/spec_fields.md` describes the `discovery` section and the dictionary file. `scripts/ml_common.py`, `scripts/nb_common.py`, and `scripts/eda_core.py` are copies of the canonical files in `claude-skills/_ml_shared/`, kept in sync by `tools/sync_ml_shared.py`.
+`reference/spec_fields.md` describes the `discovery` section and the dictionary file. `scripts/ml_common.py`, `scripts/nb_common.py`, and `scripts/eda_core.py` are copies of the canonical files in `skills/_ml_shared/`, kept in sync by `tools/sync_ml_shared.py`.

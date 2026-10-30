@@ -196,7 +196,7 @@ def dictionary_risks(spec):
 
 
 def installed_skills():
-    """Names of skills that exist, in the claude-skills folder this skill lives in or in ~/.claude/skills."""
+    """Names of skills that exist, in the skills folder this skill lives in or in ~/.claude/skills."""
     found = set()
     here_skills = os.path.dirname(os.path.dirname(os.path.realpath(HERE)))
     for base in (here_skills, os.path.expanduser("~/.claude/skills")):
@@ -427,7 +427,7 @@ def print_table(r, explain=False):
                          "`/ml-project-setup` (`setup_project.py <folder> --add-tracking`).")
     if tk and tk["reachable"] is False:
         attention.append(f"The MLflow server at {tk['uri']} is not reachable, so new runs are not logged. Start it with "
-                         "`python3 ~/Projects/claude-skills/tools/mlflow_server.py start`.")
+                         "`python3 ~/Projects/claude-config/skills/tools/mlflow_server.py start`.")
     if tk and tk["missing"]:
         attention.append("No MLflow run is logged for " + ", ".join(tk["missing"])
                          + ". A run is logged the next time each of those notebooks runs with the server up.")
@@ -500,7 +500,7 @@ def print_next(r):
               "`/ab-test-framing`.")
     elif nxt and not nxt["installed"]:
         print(f"**Next:** `/{n['skill']}`, which is not built yet. Start it from `_ml-skill-template/` in the "
-              "claude-skills folder.")
+              "skills folder.")
     else:
         print(f"**Next:** `/{n['skill']}`: {nxt['what'] if nxt else ''}.")
 

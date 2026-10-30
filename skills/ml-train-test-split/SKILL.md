@@ -15,7 +15,7 @@ Decide what "unseen data" means for this model, before any feature work. The out
 
 It also writes the `split` section of `ml_spec.yaml`. Cross validation on the training set is how later stages compare and tune models; the test set is not touched until the final evaluation.
 
-This is step 7 of the ML project skills: ml-project-setup, ml-business-framing (anchors only), ml-data-discovery, ml-business-framing (full framing), ml-problem-framing, ml-eda-report, **ml-train-test-split**, then ml-feature-engineering, ml-baseline-model, ml-model-training, and ml-offline-evaluation. Every skill reads `ml_spec.yaml` first and writes only its own section. The shared conventions are in `ML_CONVENTIONS.md` in the claude-skills folder. `reference/strategies.md` explains every strategy, the gap, backtest folds, and the red flags.
+This is step 7 of the ML project skills: ml-project-setup, ml-business-framing (anchors only), ml-data-discovery, ml-business-framing (full framing), ml-problem-framing, ml-eda-report, **ml-train-test-split**, then ml-feature-engineering, ml-baseline-model, ml-model-training, and ml-offline-evaluation. Every skill reads `ml_spec.yaml` first and writes only its own section. The shared conventions are in `ML_CONVENTIONS.md` in the skills folder. `reference/strategies.md` explains every strategy, the gap, backtest folds, and the red flags.
 
 ## Ground rules
 
@@ -98,4 +98,4 @@ Reply with these parts, in this order:
 
 ## The spec file
 
-`reference/spec_fields.md` describes the `split` section and every other field in `ml_spec.yaml`. `scripts/ml_common.py`, `scripts/nb_common.py`, and `scripts/split_core.py` are copies of the canonical files in `claude-skills/_ml_shared/`, kept in sync by `tools/sync_ml_shared.py`. Later stages read the folds with `split_core.cv_splits(train, spec["split"])`.
+`reference/spec_fields.md` describes the `split` section and every other field in `ml_spec.yaml`. `scripts/ml_common.py`, `scripts/nb_common.py`, and `scripts/split_core.py` are copies of the canonical files in `skills/_ml_shared/`, kept in sync by `tools/sync_ml_shared.py`. Later stages read the folds with `split_core.cv_splits(train, spec["split"])`.

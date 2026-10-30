@@ -68,7 +68,7 @@ read it before analysing anything, and never contradict it without asking the us
 * See progress and the next skill to run with `/ab-status`.
 * Each step's run is logged to MLflow, in this test's experiment on the shared server (`tracking` in
   `ab_spec.yaml` has the address and the link). The spec decides; MLflow records. Start the server with
-  `python3 ~/Projects/claude-skills/tools/mlflow_server.py start` when it is not running.
+  `python3 ~/Projects/claude-config/skills/tools/mlflow_server.py start` when it is not running.
 """
 
 # ---------------------------------------------------------------- the A/B versions of the setup templates

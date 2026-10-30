@@ -8,7 +8,7 @@ allowed-tools: Bash(python3 ${CLAUDE_SKILL_DIR}/scripts/*), Bash(.venv/bin/pytho
 
 Agree on what the test is for before looking at any result: the hypothesis, the decision it informs, how success is measured, and the rule for shipping. The output is the notebook `notebooks/ab01_test_framing.ipynb`. Its markdown cells hold the reasoning, risks, assumptions, and open questions, and its *Decision* cells hold the answers. Running it writes the `framing` section of `ab_spec.yaml` and the test plan `docs/test_plan.md`.
 
-This is step 1 of the A/B testing skills: ab-project-setup, **ab-test-framing**, ab-test-design, ab-data-validation, ab-analysis, ab-segment-analysis, and ab-readout. Every step reads `ab_spec.yaml` first and writes only its own section. The shared conventions are in `AB_CONVENTIONS.md` in the claude-skills folder.
+This is step 1 of the A/B testing skills: ab-project-setup, **ab-test-framing**, ab-test-design, ab-data-validation, ab-analysis, ab-segment-analysis, and ab-readout. Every step reads `ab_spec.yaml` first and writes only its own section. The shared conventions are in `AB_CONVENTIONS.md` in the skills folder.
 
 Nothing here needs the data, and no results are looked at. Column names are matched to the metrics in **ab-data-validation**.
 

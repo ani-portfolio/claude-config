@@ -13,8 +13,6 @@ This repo holds my whole Claude Code setup: the global `CLAUDE.md`, settings, ho
 | `mods/` | The four mods: bg-tasks, side-chat, usage-bar, and venv-status | Installed as plugins |
 | `skills/` | The `ml-`, `ab-`, and `help-me-` skills, `grill-me`, `code-map`, their shared code, tools, and tests | `~/.claude/skills/<name>` |
 
-`~/Projects/claude-skills` is also linked to `skills/`. Older projects and some skill text name that path, so it has to keep working.
-
 ## Set up a new machine
 
 Install these first: Claude Code, git, Node.js, Python 3, and [uv](https://docs.astral.sh/uv/). The GitHub CLI (`gh`) is the easiest way to clone this private repo.
@@ -64,7 +62,7 @@ The skills are installed globally, so a new project needs nothing from this repo
 The modelling stages log to a shared MLflow server. Start it when it is not running:
 
 ```bash
-python3 ~/Projects/claude-skills/tools/mlflow_server.py start
+python3 ~/Projects/claude-config/skills/tools/mlflow_server.py start
 ```
 
 The conventions behind the skills are in `skills/ML_CONVENTIONS.md` and `skills/AB_CONVENTIONS.md`.

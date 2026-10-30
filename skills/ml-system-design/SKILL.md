@@ -8,7 +8,7 @@ allowed-tools: Bash(python3 ${CLAUDE_SKILL_DIR}/scripts/*), Bash(.venv/bin/pytho
 
 Agree on how the model becomes a running system: which pipelines exist, which tools they use, how a challenger replaces the champion, what is served, what is watched, and what happens when something breaks. The output is a design, not code. `docs/system_design.md` holds the reasoning, a Mermaid diagram, and a settings table, and the `system` section of `ml_spec.yaml` holds the settings that later build skills read. Separate build skills implement each component later.
 
-This is step 12 of the ML project skills: ml-project-setup, ml-business-framing (anchors only), ml-data-discovery, ml-business-framing (full framing), ml-problem-framing, ml-eda-report, ml-train-test-split, ml-feature-engineering, ml-baseline-model, ml-model-training, ml-offline-evaluation, and ml-system-design. Every stage reads `ml_spec.yaml` first and writes only its own section. The shared conventions are in `ML_CONVENTIONS.md` in the claude-skills folder. Unlike the other steps, this one writes no notebook: the design document is its record.
+This is step 12 of the ML project skills: ml-project-setup, ml-business-framing (anchors only), ml-data-discovery, ml-business-framing (full framing), ml-problem-framing, ml-eda-report, ml-train-test-split, ml-feature-engineering, ml-baseline-model, ml-model-training, ml-offline-evaluation, and ml-system-design. Every stage reads `ml_spec.yaml` first and writes only its own section. The shared conventions are in `ML_CONVENTIONS.md` in the skills folder. Unlike the other steps, this one writes no notebook: the design document is its record.
 
 ## Ground rules
 
@@ -100,4 +100,4 @@ Reply with these parts, in this order:
 
 ## The spec file
 
-`reference/spec_fields.md` describes every field in `ml_spec.yaml`, including the `system` section. `scripts/ml_common.py`, `nb_common.py`, `git_ops.py`, and `tracking.py` are copies of the canonical files in `claude-skills/_ml_shared/`, kept in sync by `tools/sync_ml_shared.py`.
+`reference/spec_fields.md` describes every field in `ml_spec.yaml`, including the `system` section. `scripts/ml_common.py`, `nb_common.py`, `git_ops.py`, and `tracking.py` are copies of the canonical files in `skills/_ml_shared/`, kept in sync by `tools/sync_ml_shared.py`.

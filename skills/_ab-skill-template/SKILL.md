@@ -16,7 +16,7 @@ reference/spec_fields.md (and scripts/ab_core.py). See AB_CONVENTIONS.md, "Addin
 
 <One paragraph: what this step produces and why it matters for the decision.>
 
-This is step <number> of the A/B testing skills: ab-project-setup, ab-test-framing, ab-test-design, ab-data-validation, ab-analysis, ab-segment-analysis, and ab-readout. Every step reads `ab_spec.yaml` first and writes only its own section. The shared conventions are in `AB_CONVENTIONS.md` in the claude-skills folder.
+This is step <number> of the A/B testing skills: ab-project-setup, ab-test-framing, ab-test-design, ab-data-validation, ab-analysis, ab-segment-analysis, and ab-readout. Every step reads `ab_spec.yaml` first and writes only its own section. The shared conventions are in `AB_CONVENTIONS.md` in the skills folder.
 
 ## Ground rules
 

@@ -151,16 +151,6 @@ for link in "$CLAUDE_DIR"/skills/* "$CLAUDE_DIR"/agents/*; do
   fi
 done
 
-# Older projects and skill text name ~/Projects/claude-skills, so keep that path working.
-OLD_PATH="$HOME/Projects/claude-skills"
-if [ -e "$OLD_PATH" ] && [ ! -L "$OLD_PATH" ]; then
-  if [ "$OLD_PATH" != "$REPO/skills" ]; then
-    echo "Left $OLD_PATH alone because it is a real folder, so older projects still use it."
-  fi
-else
-  place_link "$REPO/skills" "$OLD_PATH"
-fi
-
 [ "$PLUGINS" = 1 ] && install_mods
 
 if [ "$PROBLEMS" -gt 0 ]; then

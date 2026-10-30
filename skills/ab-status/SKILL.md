@@ -6,7 +6,7 @@ allowed-tools: Bash(python3 ${CLAUDE_SKILL_DIR}/scripts/*), Bash(.venv/bin/pytho
 
 # A/B Test Status
 
-Report where an A/B test stands and what to do next. This is a helper for the A/B testing skills (ab-project-setup, ab-test-framing, ab-test-design, ab-data-validation, ab-analysis, ab-segment-analysis, and ab-readout), not a step itself: it only reads `ab_spec.yaml` and the project files. The shared conventions are in `AB_CONVENTIONS.md` in the claude-skills folder.
+Report where an A/B test stands and what to do next. This is a helper for the A/B testing skills (ab-project-setup, ab-test-framing, ab-test-design, ab-data-validation, ab-analysis, ab-segment-analysis, and ab-readout), not a step itself: it only reads `ab_spec.yaml` and the project files. The shared conventions are in `AB_CONVENTIONS.md` in the skills folder.
 
 ## Ground rules
 

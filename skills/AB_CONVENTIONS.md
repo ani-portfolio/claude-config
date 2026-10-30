@@ -93,12 +93,12 @@ No raw rows are logged. `ab-status` shows the experiment link and the steps with
 | `_ml_shared/tracking.py` (MLflow tracking, shared with the ML skills; it uses `ab_common` when it sits next to it) | `scripts/tracking.py` |
 | `_ab_shared/ab_core.py` (the statistics) | `scripts/ab_core.py`, only in the skills in `STATS_SKILLS` in `tools/sync_ab_shared.py` |
 
-Edit only the canonical files, then run `python3 tools/sync_ab_shared.py --fix` from the claude-skills folder. After editing `_ml_shared/nb_common.py` or `_ml_shared/tracking.py`, run both `tools/sync_ml_shared.py --fix` and `tools/sync_ab_shared.py --fix`, and check one notebook from each workflow.
+Edit only the canonical files, then run `python3 tools/sync_ab_shared.py --fix` from the skills folder. After editing `_ml_shared/nb_common.py` or `_ml_shared/tracking.py`, run both `tools/sync_ml_shared.py --fix` and `tools/sync_ab_shared.py --fix`, and check one notebook from each workflow.
 
 ## Adding a new skill
 
 1. Copy `_ab-skill-template/` to a folder named after the skill, and fill in the placeholders.
 2. Add the folder name to `_ab_shared/skills.txt` (and to `STATS_SKILLS` if it computes statistics), then run `python3 tools/sync_ab_shared.py --fix`.
 3. For a new step, add it to `WORKFLOW`, `NOTEBOOK_BASE`, `step_state`, and `template()` in `_ab_shared/ab_common.py`, to `_ab_shared/spec_fields.md`, and to `CHAIN` and `expected_outputs` in `ab-status/scripts/status.py`.
-4. Link it into Claude Code: `ln -s ~/Projects/claude-skills/<skill> ~/.claude/skills/<skill>`.
+4. Link it into Claude Code: `ln -s ~/Projects/claude-config/skills/<skill> ~/.claude/skills/<skill>`.
 5. Test it on a fresh project made with ab-project-setup, after running the earlier steps.

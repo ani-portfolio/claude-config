@@ -8,7 +8,7 @@ allowed-tools: Bash(python3 ${CLAUDE_SKILL_DIR}/scripts/*), Bash(.venv/bin/pytho
 
 Decisions change as a project goes on, but the notes written earlier do not update themselves. This skill finds notes that no longer agree with each other and aligns them, with the user's approval for every change.
 
-It is a helper for the ML project skills, not a workflow step: run it at any time, especially after changing a decision. The shared conventions are in `ML_CONVENTIONS.md` in the claude-skills folder.
+It is a helper for the ML project skills, not a workflow step: run it at any time, especially after changing a decision. The shared conventions are in `ML_CONVENTIONS.md` in the skills folder.
 
 ## Ground rules
 
@@ -92,4 +92,4 @@ Then suggest `/ml-status` to see the project after the changes.
 
 ## The spec file
 
-`reference/spec_fields.md` describes the shared lists, including `superseded_by` on decisions and `retired_assumptions`. `scripts/ml_common.py` (with the fixed checks, `consistency_checks`) and `scripts/nb_common.py` are copies of the canonical files in `claude-skills/_ml_shared/`, kept in sync by `tools/sync_ml_shared.py`.
+`reference/spec_fields.md` describes the shared lists, including `superseded_by` on decisions and `retired_assumptions`. `scripts/ml_common.py` (with the fixed checks, `consistency_checks`) and `scripts/nb_common.py` are copies of the canonical files in `skills/_ml_shared/`, kept in sync by `tools/sync_ml_shared.py`.

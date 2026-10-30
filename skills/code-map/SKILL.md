@@ -52,4 +52,4 @@ Keep it short:
 * `scripts/code_map.py`: the scanner, the model, the page renderer, and the `detect` and `setup` commands (Python standard library only). `--json` also writes `model.json` next to the page.
 * `scripts/page.html`: the page template; the model and Cytoscape.js are inlined into it.
 * `scripts/cytoscape.min.js`: Cytoscape.js 3.30.2, pinned.
-* Tests: `tests/test_code_map.py` in the claude-skills folder, run with `python3 tests/test_code_map.py`, on the fixture repos in `tests/fixtures/code_map/`.
+* Tests: `tests/test_code_map.py` in the skills folder, run with `python3 tests/test_code_map.py`, on the fixture repos in `tests/fixtures/code_map/`.
