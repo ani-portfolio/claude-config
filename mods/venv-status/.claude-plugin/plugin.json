@@ -1,0 +1,9 @@
+{
+  "name": "venv-status",
+  "version": "0.1.3",
+  "description": "Shows the Python virtual environment the Claude Code session is using above the prompt, and warns when it is not the project's own .venv.",
+  "author": {
+    "name": "Ani"
+  },
+  "types": "./types/index.d.ts"
+}

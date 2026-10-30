@@ -1,0 +1,6 @@
+{
+  "name": "ani-mods-usage-bar",
+  "description": "Ani's personal Claude Code mods: usage bars.",
+  "owner": { "name": "Ani" },
+  "plugins": [{ "name": "usage-bar", "source": "./" }]
+}

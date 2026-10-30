@@ -1,0 +1,7 @@
+{
+  "name": "usage-bar",
+  "version": "0.1.0",
+  "description": "Session (5hr) and weekly (7 day) usage bars above the prompt, green below 50%, yellow to 90%, red from 90%",
+  "types": "./types/index.d.ts",
+  "author": { "name": "Ani" }
+}

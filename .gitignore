@@ -6,8 +6,21 @@ __pycache__/
 # Installed packages and local copies
 node_modules/
 _backup/
+.pytest_cache/
+.ruff_cache/
 
 # Stray links made by running ln -s twice
-ml-baseline-model/ml-baseline-model
-ml-problem-framing/ml-problem-framing
-ml-status/ml-status
+skills/ml-baseline-model/ml-baseline-model
+skills/ml-problem-framing/ml-problem-framing
+skills/ml-status/ml-status
+
+# Machine state that the notifier hooks write next to their scripts
+hooks/claude-signal
+hooks/claude-notifier-focus
+hooks/claude-notifier-muted
+hooks/claude-notifier-active.d/
+hooks/claude-notifier-task-start/
+
+# Per machine settings and backups
+config/settings.local.json
+*.bak

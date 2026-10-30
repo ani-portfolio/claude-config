@@ -1,0 +1,6 @@
+{
+  "name": "ani-mods-side-chat",
+  "description": "Ani's personal Claude Code mods: side chat.",
+  "owner": { "name": "Ani" },
+  "plugins": [{ "name": "side-chat", "source": "./" }]
+}
