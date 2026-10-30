@@ -612,7 +612,7 @@ def main():
         if os.path.abspath(sys.executable) != os.path.abspath(py):
             os.execv(py, [py, os.path.abspath(__file__), *sys.argv[1:]])
         sys.exit("The test Python has no mlflow.")
-    names = args.fixtures or sorted(d for d in os.listdir(FIXTURES) if os.path.isdir(os.path.join(FIXTURES, d)))
+    names = args.fixtures or sorted(d for d in os.listdir(FIXTURES) if os.path.isdir(os.path.join(FIXTURES, d, "answers")))
     base = tempfile.mkdtemp(prefix="ml-regression-")
     summary, all_ok = [], True
     for i, name in enumerate(names):
